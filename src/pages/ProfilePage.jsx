@@ -5,6 +5,7 @@ import { useApp } from '../App'
 import { Avatar, getTimeAgo } from './Feed'
 import { getLane } from '../utils/lanes'
 import LanePicker from '../components/LanePicker'
+import MyStats from './MyStats'
 import { TOTAL_WEEKS } from '../utils/points'
 
 export default function ProfilePage() {
@@ -285,12 +286,12 @@ export default function ProfilePage() {
       {!editing && (
         <>
           <div className="flex gap-2">
-            {['posts', 'stats'].map(t => (
+            {(isMe ? ['posts', 'stats', 'my stats'] : ['posts', 'stats']).map(t => (
               <button key={t} onClick={() => setActiveTab(t)}
                 className={`px-4 py-2 rounded-2xl text-sm font-kanit font-semibold uppercase transition-all ${
                   activeTab === t ? 'bg-lime text-bg' : 'bg-card border border-border text-muted hover:text-white'
                 }`}>
-                {t === 'posts' ? `POSTS (${posts.length})` : 'STATS'}
+                {t === 'posts' ? `POSTS (${posts.length})` : t === 'my stats' ? 'MY STATS' : 'SEASON'}
               </button>
             ))}
           </div>
@@ -333,6 +334,12 @@ export default function ProfilePage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {activeTab === 'my stats' && isMe && (
+            <div className="bg-card border border-border rounded-3xl p-4">
+              <MyStats embedded={true} />
             </div>
           )}
         </>

@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient'
 import { useApp } from '../App'
 import { getCurrentWeek, getWeekLabel, TOTAL_WEEKS, breakdownPoints } from '../utils/points'
 
-export default function MyStats() {
+export default function MyStats({ embedded = false }) {
   const { profile } = useApp()
   const [submissions, setSubmissions] = useState([])
   const [loading, setLoading] = useState(true)

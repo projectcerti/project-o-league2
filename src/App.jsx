@@ -68,7 +68,8 @@ export default function App() {
           <Navbar />
           <main className="max-w-5xl mx-auto px-4 pt-6 pb-24 md:pb-8">
             <Routes>
-              <Route path="/" element={<Dashboard />} />
+              <Route path="/" element={<Feed />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/log" element={<LogActivity />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/stats" element={<MyStats />} />
