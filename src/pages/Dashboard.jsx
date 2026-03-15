@@ -5,6 +5,7 @@ import { useApp } from '../App'
 import { getCurrentWeek, getWeekDeadline, getWeekLabel, TOTAL_WEEKS } from '../utils/points'
 import { getLane } from '../utils/lanes'
 import { Avatar } from './Feed'
+import Feed from './Feed'
 
 export default function Dashboard() {
   const { profile } = useApp()
@@ -217,6 +218,12 @@ export default function Dashboard() {
             )
           })}
         </div>
+      </div>
+
+      {/* Feed */}
+      <div>
+        <p className="font-kanit font-semibold uppercase text-sm text-white mb-3">FEED</p>
+        <Feed embedded={true} />
       </div>
 
     </div>

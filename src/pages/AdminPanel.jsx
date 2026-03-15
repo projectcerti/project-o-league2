@@ -1,359 +1,390 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
 import { useApp } from '../App'
-import { getWeekLabel, calculatePoints } from '../utils/points'
-import { getLane } from '../utils/lanes'
+import { getCurrentWeek, getWeekLabel, calculatePoints, TOTAL_WEEKS } from '../utils/points'
+import { Avatar } from './Feed'
+
+const OWNER_EMAIL = 'projectcertii@gmail.com'
 
 export default function AdminPanel() {
   const { profile } = useApp()
   const [myEmail, setMyEmail] = useState('')
-  const [tab, setTab] = useState('pending')
+  const [tab, setTab] = useState('metrics')
+  const [users, setUsers] = useState([])
+  const [sessions, setSessions] = useState([])
+  const [submissions, setSubmissions] = useState([])
+  const [feedback, setFeedback] = useState([]) // all feedback across all users
+  const [loading, setLoading] = useState(true)
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [feedbackText, setFeedbackText] = useState('')
+  const [savingFeedback, setSavingFeedback] = useState(false)
+  const [feedbackMsg, setFeedbackMsg] = useState('')
+  const [grantEmail, setGrantEmail] = useState('')
+  const [granting, setGranting] = useState(false)
+  const [grantMsg, setGrantMsg] = useState('')
+  const currentWeek = getCurrentWeek()
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setMyEmail(session?.user?.email?.toLowerCase() || '')
     })
   }, [])
-  const [eligibility, setEligibility] = useState([])
-  const [grantEmail, setGrantEmail] = useState('')
-  const [granting, setGranting] = useState(false)
-  const [grantMsg, setGrantMsg] = useState('')
-  const [submissions, setSubmissions] = useState([])
-  const [users, setUsers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(null)
-  const [overrideValues, setOverrideValues] = useState({})
 
-  useEffect(() => {
-    loadData()
-  }, [tab])
+  useEffect(() => { loadData() }, [tab])
 
   async function loadData() {
     setLoading(true)
-    if (tab === 'eligibility') {
-      const { data } = await supabase.from('prize_eligibility').select('*').order('total_points', { ascending: false })
-      setEligibility(data || [])
-      setLoading(false)
-      return
-    }
-    if (tab === 'users') {
-      const { data } = await supabase.from('profiles').select('*').order('full_name')
-      setUsers(data || [])
-    } else {
-      const query = supabase
-        .from('weekly_submissions')
-        .select('*, profiles(full_name, email)')
-        .order('submitted_at', { ascending: false })
-      if (tab === 'pending') query.eq('status', 'submitted')
-      const { data } = await query
-      setSubmissions(data || [])
-    }
+    const [{ data: allUsers }, { data: allSubs }, { data: allSessions }, { data: allFeedback }] = await Promise.all([
+      supabase.from('profiles').select('*').order('full_name'),
+      supabase.from('weekly_submissions').select('*'),
+      supabase.from('sessions').select('*'),
+      supabase.from('admin_feedback').select('*, profiles!admin_feedback_user_id_fkey(full_name, avatar_url, username)').order('created_at', { ascending: false }),
+    ])
+    setUsers(allUsers || [])
+    setSubmissions(allSubs || [])
+    setSessions(allSessions || [])
+    setFeedback(allFeedback || [])
     setLoading(false)
   }
 
   async function grantAdmin() {
     if (!grantEmail.trim()) return
-    setGranting(true); setGrantMsg('')
-    const { data, error } = await supabase
-      .from('profiles')
-      .update({ is_admin: true })
-      .eq('email', grantEmail.trim().toLowerCase())
-      .select('full_name')
-    if (error || !data?.length) {
-      setGrantMsg('No user found with that email.')
-    } else {
-      setGrantMsg(`✓ Admin granted to ${data[0].full_name}`)
-      setGrantEmail('')
-    }
+    setGranting(true)
+    setGrantMsg('')
+    const { data } = await supabase.from('profiles').select('id, full_name').eq('email', grantEmail.trim().toLowerCase()).maybeSingle()
+    if (!data) { setGrantMsg('❌ User not found. Make sure they've signed up.'); setGranting(false); return }
+    await supabase.from('profiles').update({ is_admin: true }).eq('id', data.id)
+    setGrantMsg(`✓ ${data.full_name} is now an admin.`)
+    setGrantEmail('')
     setGranting(false)
+    loadData()
   }
 
-  async function updateStatus(id, status) {
-    setSaving(id + status)
-    const override = overrideValues[id]
-    const update = { status }
-    if (override !== undefined && override !== '') {
-      update.admin_override_points = parseInt(override)
+  async function revokeAdmin(userId, name) {
+    await supabase.from('profiles').update({ is_admin: false }).eq('id', userId)
+    loadData()
+  }
+
+  async function sendFeedback() {
+    if (!selectedUser || !feedbackText.trim()) return
+    setSavingFeedback(true)
+    const { error } = await supabase.from('admin_feedback').insert({
+      admin_id: profile.id,
+      user_id: selectedUser.id,
+      message: feedbackText.trim(),
+    })
+    if (!error) {
+      setFeedbackMsg(`✓ Feedback sent to ${selectedUser.full_name}`)
+      setFeedbackText('')
+      setTimeout(() => setFeedbackMsg(''), 3000)
+      loadData()
     }
-    await supabase.from('weekly_submissions').update(update).eq('id', id)
-    setSaving(null)
+    setSavingFeedback(false)
+  }
+
+  async function deleteFeedback(id) {
+    await supabase.from('admin_feedback').delete().eq('id', id)
     loadData()
   }
 
-  async function toggleAdmin(userId, current) {
-    await supabase.from('profiles').update({ is_admin: !current }).eq('id', userId)
-    loadData()
+  // Build metrics per user
+  function getUserMetrics(userId) {
+    const userSubs = submissions.filter(s => s.user_id === userId)
+    const totalPts = userSubs.reduce((a, s) => a + (s.admin_override_points ?? s.calculated_points ?? 0), 0)
+    const weeksSubmitted = userSubs.length
+    const currentWeekSub = userSubs.find(s => s.week_number === currentWeek)
+    const currentWeekPts = currentWeekSub ? (currentWeekSub.admin_override_points ?? currentWeekSub.calculated_points ?? 0) : null
+    const avgPts = weeksSubmitted > 0 ? (totalPts / weeksSubmitted).toFixed(1) : 0
+    const userSessions = sessions.filter(s => s.user_id === userId && s.week_number === currentWeek)
+    const workouts = userSessions.filter(s => s.session_type === 'workout' && s.duration_minutes >= 30).length
+    const recovery = userSessions.filter(s => s.session_type === 'recovery' && s.duration_minutes >= 20).length
+    const nutrition = userSessions.filter(s => s.session_type === 'nutrition').length
+    const missedWeeks = currentWeek - 1 - weeksSubmitted
+    const status = weeksSubmitted === 0 ? 'none' :
+      missedWeeks > 1 ? 'behind' :
+      currentWeekPts === null && currentWeek > 1 ? 'needs-log' :
+      totalPts >= (currentWeek * 8) ? 'great' : 'ok'
+    return { totalPts, weeksSubmitted, currentWeekPts, avgPts, workouts, recovery, nutrition, missedWeeks, status }
   }
 
-  async function deleteUser(userId) {
-    if (!confirm('Are you sure? This will delete the user and all their submissions.')) return
-    await supabase.from('profiles').delete().eq('id', userId)
-    loadData()
+  const statusConfig = {
+    great:     { label: '🔥 On fire',      bg: 'bg-lime/10 border-lime/30',     text: 'text-lime' },
+    ok:        { label: '✓ On track',      bg: 'bg-blue-900/20 border-blue-700/30', text: 'text-blue-300' },
+    'needs-log': { label: '⏰ Needs log',  bg: 'bg-yellow-900/20 border-yellow-700/30', text: 'text-yellow-400' },
+    behind:    { label: '⚠️ Falling behind', bg: 'bg-red-900/20 border-red-700/30', text: 'text-red-400' },
+    none:      { label: '👋 Not started', bg: 'bg-soft border-border',          text: 'text-muted' },
   }
+
+  if (loading) return (
+    <div className="max-w-3xl mx-auto space-y-3 pt-2 animate-pulse">
+      {[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-card rounded-3xl" />)}
+    </div>
+  )
+
+  const admins = users.filter(u => u.is_admin)
+  const metricsUsers = [...users].sort((a, b) => {
+    const sa = getUserMetrics(a.id), sb = getUserMetrics(b.id)
+    return sb.totalPts - sa.totalPts
+  })
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-kanit font-bold italic uppercase text-4xl tracking-tight">ADMIN PANEL</h1>
-        <p className="text-muted text-sm">Organiser controls</p>
+    <div className="max-w-3xl mx-auto space-y-4 pt-1 fade-up">
+      <div className="py-1">
+        <h1 className="font-kanit font-bold italic uppercase text-2xl text-white">ADMIN PANEL</h1>
+        <p className="text-muted text-xs font-dm">Week {currentWeek} of {TOTAL_WEEKS}</p>
       </div>
-
-      {/* Grant Admin — only visible to the owner */}
-      {myEmail === 'projectcertii@gmail.com' && (
-      <div className="bg-card border border-lime/20 rounded-3xl p-4">
-        <p className="font-kanit font-semibold uppercase text-sm text-white mb-1">GRANT ADMIN ACCESS</p>
-        <p className="text-muted text-xs font-dm mb-3">Enter someone's email to make them an admin</p>
-        <div className="flex gap-2">
-          <input
-            type="email"
-            value={grantEmail}
-            onChange={e => { setGrantEmail(e.target.value); setGrantMsg('') }}
-            placeholder="their@email.com"
-            className="flex-1 bg-soft border border-border rounded-2xl px-4 py-2.5 text-sm text-white placeholder-muted focus:outline-none focus:border-lime/40 font-dm"
-          />
-          <button
-            onClick={grantAdmin}
-            disabled={granting || !grantEmail.trim()}
-            className="bg-lime text-bg font-kanit font-semibold uppercase text-sm px-4 py-2.5 rounded-2xl disabled:opacity-40 transition-all shadow-lime-sm"
-          >
-            {granting ? '...' : 'GRANT'}
-          </button>
-        </div>
-        {grantMsg && (
-          <p className={`text-sm font-dm mt-2 ${grantMsg.startsWith('✓') ? 'text-lime' : 'text-red-400'}`}>{grantMsg}</p>
-        )}
-      </div>
-      )}
 
       {/* Tabs */}
-      <div className="flex gap-2">
-        {['pending', 'all', 'users', 'eligibility'].map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-1.5 rounded-2xl text-sm font-medium transition-all ${
-              tab === t ? 'bg-lime text-bg' : 'bg-card border border-border text-muted hover:text-white'
-            }`}
-          >
-            {t === 'pending' ? 'Pending' : t === 'all' ? 'All Submissions' : t === 'users' ? 'Users' : '🎯 Eligibility'}
-          </button>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {[
+          { id: 'metrics',  label: '📊 Metrics' },
+          { id: 'feedback', label: '💬 Feedback' },
+          { id: 'logs',     label: '📋 Logs' },
+          ...(myEmail === OWNER_EMAIL ? [{ id: 'access', label: '🔑 Access' }] : []),
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-4 py-2 rounded-2xl text-sm font-kanit font-semibold uppercase whitespace-nowrap transition-all flex-shrink-0 ${
+              tab === t.id ? 'bg-lime text-bg' : 'bg-card border border-border text-muted hover:text-white'
+            }`}>{t.label}</button>
         ))}
       </div>
 
-      {loading ? (
+      {/* ── METRICS TAB ── */}
+      {tab === 'metrics' && (
         <div className="space-y-3">
-          {[...Array(4)].map((_, i) => <div key={i} className="h-28 bg-card rounded-2xl animate-pulse" />)}
-        </div>
-      ) : tab === 'eligibility' ? (
-        <EligibilityTab rows={eligibility} />
-      ) : tab === 'users' ? (
-        <UsersTab users={users} onToggleAdmin={toggleAdmin} onDelete={deleteUser} />
-      ) : (
-        <SubmissionsTab
-          submissions={submissions}
-          saving={saving}
-          overrideValues={overrideValues}
-          onOverrideChange={(id, val) => setOverrideValues(v => ({ ...v, [id]: val }))}
-          onApprove={id => updateStatus(id, 'approved')}
-          onReject={id => updateStatus(id, 'rejected')}
-          onPending={id => updateStatus(id, 'submitted')}
-          emptyText={tab === 'pending' ? 'No pending submissions.' : 'No submissions found.'}
-        />
-      )}
-    </div>
-  )
-}
-
-function SubmissionsTab({ submissions, saving, overrideValues, onOverrideChange, onApprove, onReject, onPending, emptyText }) {
-  if (submissions.length === 0) {
-    return <div className="bg-card border border-border rounded-2xl p-8 text-center text-muted text-sm">{emptyText}</div>
-  }
-
-  return (
-    <div className="space-y-3">
-      {submissions.map(sub => {
-        const calc = sub.admin_override_points ?? sub.calculated_points ?? 0
-        return (
-          <div key={sub.id} className={`bg-card border rounded-2xl p-5 ${
-            sub.status === 'approved' ? 'border-green-800/50' :
-            sub.status === 'rejected' ? 'border-red-800/50' :
-            'border-border'
-          }`}>
-            {/* Header */}
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-white">{sub.profiles?.full_name}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full border ${
-                    sub.status === 'approved' ? 'border-green-700 text-green-400' :
-                    sub.status === 'rejected' ? 'border-red-700 text-red-400' :
-                    'border-yellow-700 text-yellow-400'
-                  }`}>
-                    {sub.status === 'approved' ? '✓ Approved' : sub.status === 'rejected' ? '✗ Rejected' : '⏳ Pending'}
-                  </span>
+          <p className="text-xs text-muted font-dm">Sorted by total points · Week {currentWeek}</p>
+          {metricsUsers.map(u => {
+            const m = getUserMetrics(u.id)
+            const sc = statusConfig[m.status]
+            const userFeedbackCount = feedback.filter(f => f.user_id === u.id).length
+            return (
+              <div key={u.id} className={`border rounded-3xl p-4 ${sc.bg}`}>
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar name={u.full_name} avatarUrl={u.avatar_url} size="md" />
+                    <div>
+                      <p className="font-kanit font-semibold text-white text-sm">{u.full_name}</p>
+                      {u.username && <p className="text-muted text-xs font-dm">@{u.username}</p>}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <span className={`text-xs font-kanit font-semibold px-2 py-1 rounded-full border ${sc.bg} ${sc.text}`}>{sc.label}</span>
+                  </div>
                 </div>
-                <p className="text-muted text-xs mt-0.5">
-                  Week {sub.week_number} · {getWeekLabel(sub.week_number)} · submitted {new Date(sub.submitted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                </p>
+
+                <div className="grid grid-cols-4 gap-2 mb-3">
+                  {[
+                    { label: 'Total pts', value: m.totalPts },
+                    { label: 'Avg/week', value: m.avgPts },
+                    { label: 'Weeks logged', value: `${m.weeksSubmitted}/${currentWeek > 1 ? currentWeek - 1 : 0}` },
+                    { label: 'This week', value: m.currentWeekPts !== null ? m.currentWeekPts : '—' },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="bg-bg/40 rounded-2xl p-2 text-center">
+                      <p className="text-xs text-muted font-dm">{label}</p>
+                      <p className="font-kanit font-semibold text-white text-base">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* This week's activity */}
+                <div className="flex gap-2 mb-3">
+                  {[
+                    { emoji: '💪', label: 'Workouts', val: m.workouts },
+                    { emoji: '🧘', label: 'Recovery', val: m.recovery },
+                    { emoji: '🥗', label: 'Nutrition', val: m.nutrition },
+                  ].map(({ emoji, label, val }) => (
+                    <div key={label} className={`flex-1 rounded-2xl px-2 py-1.5 text-center border ${val > 0 ? 'border-lime/20 bg-lime/5' : 'border-border bg-bg/20'}`}>
+                      <p className="text-base">{emoji}</p>
+                      <p className="text-xs text-muted font-dm">{label}</p>
+                      <p className={`font-kanit font-semibold text-sm ${val > 0 ? 'text-lime' : 'text-border'}`}>{val}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {m.missedWeeks > 0 && (
+                  <p className="text-xs text-red-400 font-dm mb-2">⚠️ Missed {m.missedWeeks} week{m.missedWeeks !== 1 ? 's' : ''}</p>
+                )}
+
+                <button onClick={() => { setSelectedUser(u); setTab('feedback') }}
+                  className="text-xs text-lime font-dm hover:underline">
+                  {userFeedbackCount > 0 ? `💬 ${userFeedbackCount} feedback note${userFeedbackCount !== 1 ? 's' : ''} · Send more →` : '💬 Send feedback →'}
+                </button>
               </div>
-              <div className="font-kanit font-bold italic uppercase text-3xl text-white">{calc}<span className="text-muted text-sm">/11</span></div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── FEEDBACK TAB ── */}
+      {tab === 'feedback' && (
+        <div className="space-y-4">
+          {/* Send feedback */}
+          <div className="bg-card border border-border rounded-3xl p-4 space-y-3">
+            <p className="font-kanit font-semibold uppercase text-sm text-white">SEND PRIVATE FEEDBACK</p>
+            <p className="text-xs text-muted font-dm">Only the recipient can see this — it appears privately on their profile.</p>
+
+            {/* User picker */}
+            <div>
+              <p className="text-xs font-dm text-muted uppercase tracking-widest mb-2">SELECT MEMBER</p>
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {users.map(u => (
+                  <button key={u.id} onClick={() => setSelectedUser(u)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-2xl border transition-all text-left ${
+                      selectedUser?.id === u.id ? 'border-lime/40 bg-lime/10' : 'border-border hover:border-lime/20'
+                    }`}>
+                    <Avatar name={u.full_name} avatarUrl={u.avatar_url} size="sm" />
+                    <div>
+                      <p className="text-sm font-dm text-white">{u.full_name}</p>
+                      {u.username && <p className="text-xs text-muted font-dm">@{u.username}</p>}
+                    </div>
+                    {selectedUser?.id === u.id && <span className="ml-auto text-lime text-xs">✓</span>}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Activity breakdown */}
-            <div className="grid grid-cols-4 md:grid-cols-4 gap-2 text-xs mb-3">
-              {[
-                { label: '💪 Workouts', val: sub.workouts },
-                { label: '🧘 Recovery', val: sub.recovery_sessions + ' sessions' },
-                { label: '🤝 Social', val: sub.social_sessions + ' sessions' },
-                { label: '🥗 Nutrition', val: sub.nutrition_days + ' days' },
-              ].map(({ label, val }) => (
-                <div key={label} className="bg-bg rounded-2xl p-2">
-                  <p className="text-muted">{label}</p>
-                  <p className="text-white font-medium mt-0.5">{val}</p>
+            {selectedUser && (
+              <>
+                <div>
+                  <p className="text-xs font-dm text-muted uppercase tracking-widest mb-2">
+                    MESSAGE TO {selectedUser.full_name.toUpperCase()}
+                  </p>
+                  <textarea value={feedbackText} onChange={e => setFeedbackText(e.target.value)}
+                    placeholder={`Hey ${selectedUser.full_name.split(' ')[0]}, great work this week…`}
+                    rows={4}
+                    className="w-full bg-soft border border-border rounded-2xl px-4 py-3 text-sm text-white placeholder-muted focus:outline-none focus:border-lime/40 resize-none font-dm" />
+                </div>
+                {feedbackMsg && <p className="text-sm text-lime font-dm">{feedbackMsg}</p>}
+                <button onClick={sendFeedback} disabled={savingFeedback || !feedbackText.trim()}
+                  className="w-full bg-lime text-bg font-kanit font-bold uppercase py-3 rounded-2xl disabled:opacity-40 active:scale-95 transition-all shadow-lime-sm">
+                  {savingFeedback ? 'SENDING…' : `SEND TO ${selectedUser.full_name.split(' ')[0].toUpperCase()}`}
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Feedback history */}
+          {feedback.length > 0 && (
+            <div className="space-y-2">
+              <p className="font-kanit font-semibold uppercase text-sm text-white">FEEDBACK HISTORY</p>
+              {feedback.map(f => (
+                <div key={f.id} className="bg-card border border-border rounded-3xl p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Avatar name={f.profiles?.full_name} avatarUrl={f.profiles?.avatar_url} size="sm" />
+                      <div>
+                        <p className="text-sm font-kanit font-semibold text-white">{f.profiles?.full_name}</p>
+                        <p className="text-xs text-muted font-dm">{new Date(f.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                      </div>
+                    </div>
+                    <button onClick={() => deleteFeedback(f.id)} className="text-muted hover:text-red-400 text-sm transition-colors">×</button>
+                  </div>
+                  <p className="text-sm text-gray-200 font-dm leading-relaxed">{f.message}</p>
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
 
-            {/* Notes */}
-            {sub.notes && <p className="text-muted text-xs italic mb-3">"{sub.notes}"</p>}
+      {/* ── LOGS TAB ── */}
+      {tab === 'logs' && (
+        <div className="space-y-3">
+          <p className="text-xs text-muted font-dm">All submissions for review</p>
+          {submissions.length === 0 ? (
+            <div className="bg-card border border-dashed border-border rounded-3xl p-8 text-center">
+              <p className="text-muted font-dm text-sm">No submissions yet.</p>
+            </div>
+          ) : (
+            [...submissions]
+              .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at))
+              .map(sub => {
+                const u = users.find(u => u.id === sub.user_id)
+                return (
+                  <div key={sub.id} className="bg-card border border-border rounded-3xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <Avatar name={u?.full_name} avatarUrl={u?.avatar_url} size="sm" />
+                        <div>
+                          <p className="font-kanit font-semibold text-sm text-white">{u?.full_name || 'Unknown'}</p>
+                          <p className="text-xs text-muted font-dm">Week {sub.week_number} · {getWeekLabel(sub.week_number)}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-kanit font-bold text-lime text-lg">{sub.admin_override_points ?? sub.calculated_points ?? 0}<span className="text-muted text-xs">/11</span></p>
+                        <span className={`text-xs font-dm px-2 py-0.5 rounded-full ${
+                          sub.status === 'approved' ? 'bg-lime/10 text-lime' :
+                          sub.status === 'rejected' ? 'bg-red-900/20 text-red-400' :
+                          'bg-yellow-900/20 text-yellow-400'
+                        }`}>{sub.status}</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5 text-xs font-dm text-center">
+                      {[
+                        { label: '💪', val: sub.workouts },
+                        { label: '🧘', val: sub.recovery_sessions },
+                        { label: '🤝', val: sub.social_sessions },
+                        { label: '🥗', val: `${sub.nutrition_days}d` },
+                      ].map(({ label, val }) => (
+                        <div key={label} className="bg-soft rounded-xl py-1.5">
+                          <p>{label}</p><p className="text-white font-kanit">{val ?? 0}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })
+          )}
+        </div>
+      )}
 
-            {/* Proof photos */}
-            {sub.proof_urls?.length > 0 && (
-              <div className="flex gap-2 mb-3">
-                {sub.proof_urls.map(url => (
-                  <a key={url} href={url} target="_blank" rel="noreferrer">
-                    <img src={url} alt="proof" className="w-14 h-14 rounded-2xl object-cover border border-border hover:border-lime transition-colors" />
-                  </a>
+      {/* ── ACCESS TAB (owner only) ── */}
+      {tab === 'access' && myEmail === OWNER_EMAIL && (
+        <div className="space-y-4">
+          {/* Grant admin */}
+          <div className="bg-card border border-lime/20 rounded-3xl p-4 space-y-3">
+            <p className="font-kanit font-semibold uppercase text-sm text-white">GRANT ADMIN ACCESS</p>
+            <p className="text-xs text-muted font-dm">Enter someone's email to make them an admin.</p>
+            <div className="flex gap-2">
+              <input type="email" value={grantEmail}
+                onChange={e => { setGrantEmail(e.target.value); setGrantMsg('') }}
+                placeholder="their@email.com"
+                className="flex-1 bg-soft border border-border rounded-2xl px-4 py-2.5 text-sm text-white placeholder-muted focus:outline-none focus:border-lime/40 font-dm" />
+              <button onClick={grantAdmin} disabled={granting || !grantEmail.trim()}
+                className="bg-lime text-bg font-kanit font-semibold uppercase text-sm px-4 py-2.5 rounded-2xl disabled:opacity-40 shadow-lime-sm">
+                {granting ? '…' : 'GRANT'}
+              </button>
+            </div>
+            {grantMsg && <p className={`text-sm font-dm ${grantMsg.startsWith('✓') ? 'text-lime' : 'text-red-400'}`}>{grantMsg}</p>}
+          </div>
+
+          {/* Current admins */}
+          <div className="bg-card border border-border rounded-3xl p-4">
+            <p className="font-kanit font-semibold uppercase text-sm text-white mb-3">CURRENT ADMINS</p>
+            {admins.length === 0 ? (
+              <p className="text-muted text-sm font-dm">No admins yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {admins.map(u => (
+                  <div key={u.id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={u.full_name} avatarUrl={u.avatar_url} size="sm" />
+                      <div>
+                        <p className="text-sm font-dm text-white">{u.full_name}</p>
+                        <p className="text-xs text-muted font-dm">{u.email}</p>
+                      </div>
+                    </div>
+                    {u.email?.toLowerCase() !== OWNER_EMAIL && (
+                      <button onClick={() => revokeAdmin(u.id, u.full_name)}
+                        className="text-xs text-red-400 font-dm hover:underline">Revoke</button>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
-
-            {/* Actions */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-muted">Override pts:</label>
-                <input
-                  type="number"
-                  min="0" max="11"
-                  value={overrideValues[sub.id] ?? ''}
-                  onChange={e => onOverrideChange(sub.id, e.target.value)}
-                  placeholder={String(sub.calculated_points ?? 0)}
-                  className="w-16 bg-bg border border-border rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-lime"
-                />
-              </div>
-              <div className="flex gap-2 ml-auto">
-                {sub.status !== 'submitted' && (
-                  <button onClick={() => onPending(sub.id)} disabled={saving === sub.id + 'submitted'}
-                    className="text-xs px-3 py-1.5 rounded-2xl border border-border text-muted hover:text-white transition-colors">
-                    Reset
-                  </button>
-                )}
-                {sub.status !== 'rejected' && (
-                  <button onClick={() => onReject(sub.id)} disabled={saving === sub.id + 'rejected'}
-                    className="text-xs px-3 py-1.5 rounded-2xl border border-red-800 text-red-400 hover:bg-red-900/20 transition-colors">
-                    {saving === sub.id + 'rejected' ? '...' : 'Reject'}
-                  </button>
-                )}
-                {sub.status !== 'approved' && (
-                  <button onClick={() => onApprove(sub.id)} disabled={saving === sub.id + 'approved'}
-                    className="text-xs px-3 py-1.5 rounded-2xl bg-green-900/30 border border-green-800 text-green-400 hover:bg-green-900/50 transition-colors">
-                    {saving === sub.id + 'approved' ? '...' : 'Approve'}
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function UsersTab({ users, onToggleAdmin, onDelete }) {
-  return (
-    <div className="bg-card border border-border rounded-2xl overflow-hidden">
-      <div className="px-5 py-3 border-b border-border grid grid-cols-12 text-xs text-muted uppercase tracking-wider">
-        <span className="col-span-5">Name</span>
-        <span className="col-span-4">Email</span>
-        <span className="col-span-3 text-right">Actions</span>
-      </div>
-      {users.length === 0 ? (
-        <div className="p-8 text-center text-muted text-sm">No users found.</div>
-      ) : (
-        users.map(user => (
-          <div key={user.id} className="px-5 py-4 grid grid-cols-12 items-center border-b border-border/50 last:border-0">
-            <div className="col-span-5 flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-border flex items-center justify-center text-xs font-bold text-muted">
-                {user.full_name?.[0]?.toUpperCase()}
-              </div>
-              <div>
-                <span className="text-sm text-white">{user.full_name}</span>
-                {user.is_admin && <span className="ml-2 text-xs text-lime">Admin</span>}
-              </div>
-            </div>
-            <span className="col-span-4 text-sm text-muted truncate">{user.email}</span>
-            <div className="col-span-3 flex justify-end gap-2">
-              <button
-                onClick={() => onToggleAdmin(user.id, user.is_admin)}
-                className="text-xs px-2.5 py-1 rounded-2xl border border-border text-muted hover:text-lime hover:border-lime transition-colors"
-              >
-                {user.is_admin ? 'Remove admin' : 'Make admin'}
-              </button>
-              <button
-                onClick={() => onDelete(user.id)}
-                className="text-xs px-2.5 py-1 rounded-2xl border border-red-900 text-red-500 hover:bg-red-900/20 transition-colors"
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        ))
+        </div>
       )}
-    </div>
-  )
-}
-
-function EligibilityTab({ rows }) {
-  if (rows.length === 0) return <div className="bg-card border border-border rounded-2xl p-8 text-center text-muted text-sm">No data.</div>
-  return (
-    <div className="space-y-2">
-      {rows.map(r => {
-        const lane = getLane(r.lane)
-        return (
-          <div key={r.user_id} className={`bg-card border rounded-2xl px-5 py-4 grid grid-cols-12 items-center gap-2 ${
-            !r.prize_eligible ? 'border-red-800/40' : r.flawless_on_track ? 'border-yellow-400/30' : 'border-border'
-          }`}>
-            <div className="col-span-4">
-              <p className="font-medium text-sm text-white">{r.full_name}</p>
-              {r.username && <p className="text-xs text-muted">@{r.username}</p>}
-              {lane && r.lane_public && (
-                <span className={`text-xs mt-1 inline-block ${lane.text}`}>{lane.emoji} {lane.label}</span>
-              )}
-            </div>
-            <div className="col-span-2 text-center">
-              <p className="font-kanit font-bold italic uppercase text-2xl text-white">{r.total_points}</p>
-              <p className="text-xs text-muted">points</p>
-            </div>
-            <div className="col-span-2 text-center">
-              <p className={`font-kanit font-bold italic uppercase text-2xl ${r.weeks_missed >= 2 ? 'text-red-400' : r.weeks_missed === 1 ? 'text-yellow-400' : 'text-green-400'}`}>{r.weeks_missed}</p>
-              <p className="text-xs text-muted">missed</p>
-            </div>
-            <div className="col-span-2 text-center">
-              <p className={`font-kanit font-bold italic uppercase text-xl ${r.recovery_weeks >= 4 ? 'text-green-400' : 'text-yellow-400'}`}>{r.recovery_weeks}<span className="text-muted text-sm">/4</span></p>
-              <p className="text-xs text-muted">recovery</p>
-            </div>
-            <div className="col-span-2 text-right">
-              <span className={`text-xs font-medium px-2 py-1 rounded-full border ${
-                !r.prize_eligible ? 'border-red-700 text-red-400 bg-red-900/20' :
-                r.flawless_on_track ? 'border-yellow-400/50 text-yellow-400 bg-yellow-400/10' :
-                'border-green-700 text-green-400 bg-green-900/20'
-              }`}>
-                {!r.prize_eligible ? 'OUT' : r.flawless_on_track ? '💎 Flawless' : '✓ Eligible'}
-              </span>
-            </div>
-          </div>
-        )
-      })}
     </div>
   )
 }

@@ -27,6 +27,7 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab]       = useState('posts')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting]         = useState(false)
+  const [adminFeedback, setAdminFeedback] = useState([])
 
   const isMe = user?.id === myProfile?.id
 
@@ -85,6 +86,15 @@ export default function ProfilePage() {
         best:  subs.reduce((m, s) => Math.max(m, s.admin_override_points ?? s.calculated_points ?? 0), 0),
         submitted: subs.length,
       })
+
+      // Load private admin feedback (only if viewing own profile)
+      if (found.id === myProfile.id) {
+        const { data: fb } = await supabase.from('admin_feedback')
+          .select('*, profiles!admin_feedback_admin_id_fkey(full_name, avatar_url)')
+          .eq('user_id', found.id)
+          .order('created_at', { ascending: false })
+        setAdminFeedback(fb || [])
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -285,13 +295,16 @@ export default function ProfilePage() {
       {/* Tabs */}
       {!editing && (
         <>
-          <div className="flex gap-2">
-            {(isMe ? ['posts', 'stats', 'my stats'] : ['posts', 'stats']).map(t => (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {(isMe
+              ? ['posts', 'stats', 'my stats', ...(adminFeedback.length > 0 ? ['feedback'] : [])]
+              : ['posts', 'stats']
+            ).map(t => (
               <button key={t} onClick={() => setActiveTab(t)}
-                className={`px-4 py-2 rounded-2xl text-sm font-kanit font-semibold uppercase transition-all ${
+                className={`px-4 py-2 rounded-2xl text-sm font-kanit font-semibold uppercase transition-all flex-shrink-0 ${
                   activeTab === t ? 'bg-lime text-bg' : 'bg-card border border-border text-muted hover:text-white'
                 }`}>
-                {t === 'posts' ? `POSTS (${posts.length})` : t === 'my stats' ? 'MY STATS' : 'SEASON'}
+                {t === 'posts' ? `POSTS (${posts.length})` : t === 'my stats' ? 'MY STATS' : t === 'feedback' ? `💬 NOTES (${adminFeedback.length})` : 'SEASON'}
               </button>
             ))}
           </div>
@@ -340,6 +353,26 @@ export default function ProfilePage() {
           {activeTab === 'my stats' && isMe && (
             <div className="bg-card border border-border rounded-3xl p-4">
               <MyStats embedded={true} />
+            </div>
+          )}
+
+          {activeTab === 'feedback' && isMe && (
+            <div className="space-y-3">
+              <div className="bg-yellow-900/10 border border-yellow-700/30 rounded-2xl px-4 py-2.5">
+                <p className="text-yellow-300 text-xs font-dm">🔒 Private — only you can see these notes from your coach.</p>
+              </div>
+              {adminFeedback.map(f => (
+                <div key={f.id} className="bg-card border border-border rounded-3xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">💬</span>
+                    <div>
+                      <p className="text-xs font-kanit font-semibold text-lime uppercase">Coach Note</p>
+                      <p className="text-xs text-muted font-dm">{new Date(f.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-200 font-dm leading-relaxed">{f.message}</p>
+                </div>
+              ))}
             </div>
           )}
         </>

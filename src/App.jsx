@@ -68,8 +68,8 @@ export default function App() {
           <Navbar />
           <main className="max-w-5xl mx-auto px-4 pt-6 pb-24 md:pb-8">
             <Routes>
-              <Route path="/" element={<Feed />} />
-              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/feed" element={<Feed />} />
               <Route path="/log" element={<LogActivity />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/stats" element={<MyStats />} />
@@ -77,7 +77,7 @@ export default function App() {
               <Route path="/targets" element={<Targets />} />
               <Route path="/profile/:username" element={<ProfilePage />} />
               <Route path="/profile" element={<Navigate to={`/profile/${profile?.username || profile?.id}`} />} />
-              {profile?.is_admin && <Route path="/admin" element={<AdminPanel />} />}
+              <Route path="/admin" element={<AdminPanel />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </main>

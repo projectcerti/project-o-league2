@@ -5,7 +5,7 @@ import { useApp } from '../App'
 
 const MAX_CHARS = 500
 
-export default function Feed() {
+export default function Feed({ embedded = false }) {
   const { profile } = useApp()
   const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -140,6 +140,7 @@ export default function Feed() {
       </div>
 
       {/* Compose box */}
+      {!embedded && (
       <div className="bg-card border border-border rounded-3xl p-4 shadow-card">
         <div className="flex gap-3">
           <Avatar name={profile?.full_name} avatarUrl={profile?.avatar_url} size="md" />
@@ -206,6 +207,8 @@ export default function Feed() {
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
           onChange={handlePhotoSelect} />
       </div>
+
+      )}
 
       {/* Posts */}
       {loading ? (
