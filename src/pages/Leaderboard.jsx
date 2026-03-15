@@ -1,0 +1,174 @@
+import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase } from '../supabaseClient'
+import { useApp } from '../App'
+import { getCurrentWeek, TOTAL_WEEKS } from '../utils/points'
+import { Avatar } from './Feed'
+
+export default function Leaderboard() {
+  const { profile } = useApp()
+  const [tab, setTab] = useState('overall')
+  const [rows, setRows] = useState([])
+  const [weekRows, setWeekRows] = useState([])
+  const [lastRefreshed, setLastRefreshed] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const currentWeek = getCurrentWeek()
+
+  useEffect(() => { loadOverall() }, [])
+  useEffect(() => { if (tab !== 'overall') loadWeek(tab) }, [tab])
+
+  async function loadOverall() {
+    setLoading(true)
+    const { data } = await supabase.from('leaderboard_cache').select('*').order('rank')
+    setRows(data || [])
+    if (data?.[0]?.last_refreshed) setLastRefreshed(data[0].last_refreshed)
+    setLoading(false)
+  }
+
+  async function loadWeek(weekNum) {
+    setLoading(true)
+    const { data } = await supabase
+      .from('weekly_submissions')
+      .select('*, profiles(id, full_name, username, avatar_color, avatar_url)')
+      .eq('week_number', weekNum)
+      .in('status', ['approved', 'submitted'])
+      .order('calculated_points', { ascending: false })
+    setWeekRows((data || []).map((d, i) => ({
+      user_id: d.user_id, full_name: d.profiles?.full_name,
+      username: d.profiles?.username, avatar_color: d.profiles?.avatar_color,
+      total_points: d.admin_override_points ?? d.calculated_points ?? 0,
+      status: d.status, rank: i + 1,
+    })))
+    setLoading(false)
+  }
+
+  const displayRows = tab === 'overall' ? rows : weekRows
+  const myRow = displayRows.find(r => r.user_id === profile.id)
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between pt-1">
+        <h1 className="font-kanit font-bold italic uppercase text-2xl text-white">LEADERBOARD</h1>
+        {lastRefreshed && tab === 'overall' && (
+          <p className="text-xs text-muted font-dm">Updated {formatTime(lastRefreshed)}</p>
+        )}
+      </div>
+
+      {/* My position */}
+      {myRow && (
+        <div className="bg-lime/10 border border-lime/20 rounded-3xl px-5 py-4 flex items-center justify-between shadow-lime-sm">
+          <div className="flex items-center gap-3">
+            <span className="font-kanit font-bold italic uppercase text-3xl text-lime">#{myRow.rank}</span>
+            <div>
+              <p className="font-kanit font-semibold text-sm text-white">YOUR POSITION</p>
+              <p className="text-xs text-muted font-dm">{myRow.total_points} pts</p>
+            </div>
+          </div>
+          {tab === 'overall' && myRow.previous_rank > 0 && myRow.rank !== myRow.previous_rank && (
+            <span className={`text-sm font-kanit font-semibold ${myRow.rank < myRow.previous_rank ? 'text-lime' : 'text-red-400'}`}>
+              {myRow.rank < myRow.previous_rank ? `↑${myRow.previous_rank - myRow.rank}` : `↓${myRow.rank - myRow.previous_rank}`}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+        <TabBtn active={tab === 'overall'} onClick={() => setTab('overall')}>🏆 Overall</TabBtn>
+        {Array.from({ length: currentWeek }, (_, i) => i + 1).map(w => (
+          <TabBtn key={w} active={tab === w} onClick={() => setTab(w)}>Wk {w}</TabBtn>
+        ))}
+      </div>
+
+      {/* Top 3 podium */}
+      {!loading && displayRows.length >= 3 && (
+        <div className="grid grid-cols-3 gap-2">
+          {[displayRows[1], displayRows[0], displayRows[2]].map((row, i) => {
+            const pos = [2, 1, 3][i]
+            const h = ['h-20', 'h-28', 'h-16'][i]
+            const golds = ['border-gray-500/30 bg-gray-500/5', 'border-yellow-400/40 bg-yellow-400/5', 'border-amber-600/30 bg-amber-600/5']
+            return (
+              <Link key={row?.user_id} to={`/profile/${row?.username || row?.user_id}`}
+                className="flex flex-col items-center gap-1.5 group">
+                <div className={`w-full ${h} rounded-2xl border ${golds[i]} flex flex-col items-center justify-end pb-3 transition-all group-hover:scale-105`}>
+                  <Avatar name={row?.full_name} avatarUrl={row?.avatar_url} size="sm" />
+                  <span className="text-lg mt-1">{pos === 1 ? '🥇' : pos === 2 ? '🥈' : '🥉'}</span>
+                </div>
+                <p className="text-xs font-dm font-medium text-center truncate w-full group-hover:text-lime transition-colors">
+                  {row?.full_name?.split(' ')[0]}
+                </p>
+                <p className="font-kanit font-bold italic uppercase text-lg text-white">{row?.total_points}<span className="text-muted text-xs"> pts</span></p>
+              </Link>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Full list */}
+      <div className="bg-card border border-border rounded-3xl overflow-hidden shadow-card">
+        {loading ? (
+          <div className="p-5 space-y-3">
+            {[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-soft rounded-2xl animate-pulse" />)}
+          </div>
+        ) : displayRows.length === 0 ? (
+          <div className="p-8 text-center text-muted text-sm font-dm">No data yet.</div>
+        ) : (
+          <div className="divide-y divide-border/50">
+            {displayRows.map((row, idx) => {
+              const isMe = row.user_id === profile.id
+              const rankChange = tab === 'overall' && row.previous_rank > 0 ? row.previous_rank - row.rank : 0
+              return (
+                <Link key={row.user_id} to={`/profile/${row.username || row.user_id}`}
+                  className={`px-5 py-3.5 flex items-center gap-3 transition-colors ${isMe ? 'bg-lime/5' : 'hover:bg-soft'}`}>
+                  <span className={`font-kanit font-bold italic uppercase text-lg w-6 text-center ${
+                    idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-gray-400' : idx === 2 ? 'text-amber-600' : 'text-muted'
+                  }`}>{idx + 1}</span>
+                  <Avatar name={row.full_name} avatarUrl={row.avatar_url} size="sm" />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-dm font-medium truncate ${isMe ? 'text-lime' : 'text-white'}`}>
+                      {row.full_name}{isMe ? ' (you)' : ''}
+                    </p>
+                    {row.username && <p className="text-xs text-muted font-dm">@{row.username}</p>}
+                  </div>
+                  {rankChange !== 0 && (
+                    <span className={`text-xs font-kanit font-semibold ${rankChange > 0 ? 'text-lime' : 'text-red-400'}`}>
+                      {rankChange > 0 ? `↑${rankChange}` : `↓${Math.abs(rankChange)}`}
+                    </span>
+                  )}
+                  <span className="font-kanit font-bold italic uppercase text-xl text-white">{row.total_points}</span>
+                </Link>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Points key */}
+      <div className="bg-card border border-border rounded-3xl p-4 shadow-card">
+        <p className="font-kanit font-semibold text-sm text-white mb-3">POINTS SYSTEM</p>
+        <div className="grid grid-cols-1 gap-1.5 text-xs text-muted font-dm">
+          <p>💪 Workouts: 1=2pts · 2=4pts · 3+=6pts</p>
+          <p>🧘 Recovery: 1+ session = 1pt</p>
+          <p>🤝 Social/class: 1+ session = 1pt</p>
+          <p>🥗 Nutrition: 5d=1pt · 6–7d=2pts</p>
+          <p>⭐ Balanced week (all 4 categories) = +1pt</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TabBtn({ active, onClick, children }) {
+  return (
+    <button onClick={onClick}
+      className={`px-4 py-2 rounded-2xl text-sm font-dm font-medium whitespace-nowrap transition-all flex-shrink-0 ${
+        active ? 'bg-lime text-bg shadow-lime-sm' : 'bg-card border border-border text-muted hover:text-bg'
+      }`}>
+      {children}
+    </button>
+  )
+}
+
+function formatTime(d) {
+  return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}

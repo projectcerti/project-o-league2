@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background-color: #0C0C0E;
+  color: #fff;
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: none;
+  font-feature-settings: 'tnum' on; /* tabular numbers - fixes stretching */
+}
+html, body { overscroll-behavior-y: none; }
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: #0C0C0E; }
+::-webkit-scrollbar-thumb { background: #222226; border-radius: 2px; }
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px #161618 inset;
+  -webkit-text-fill-color: #fff;
+  caret-color: #fff;
+}
+
+/* Kanit helpers */
+.h1 { font-family: 'Kanit', sans-serif; font-weight: 700; font-style: italic; text-transform: uppercase; letter-spacing: 0.01em; }
+.h2 { font-family: 'Kanit', sans-serif; font-weight: 500; font-style: normal; text-transform: uppercase; letter-spacing: 0.02em; }
+.num { font-family: 'Kanit', sans-serif; font-weight: 600; font-style: normal; font-feature-settings: 'tnum' on; }
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fade-up 0.3s ease forwards; }
+
+@media (max-width: 768px) { button { min-height: 44px; } }
