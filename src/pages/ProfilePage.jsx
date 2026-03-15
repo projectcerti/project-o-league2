@@ -28,10 +28,26 @@ export default function ProfilePage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting]         = useState(false)
   const [adminFeedback, setAdminFeedback] = useState([])
+  const [showGrantAdmin, setShowGrantAdmin] = useState(false)
+  const [grantEmail, setGrantEmail] = useState('')
+  const [granting, setGranting] = useState(false)
+  const [grantMsg, setGrantMsg] = useState('')
+  const [isOwner, setIsOwner] = useState(false)
 
   const isMe = user?.id === myProfile?.id
 
   useEffect(() => { if (username) loadProfile() }, [username])
+
+  useEffect(() => {
+    // Check owner from profile role (fetched fresh from DB)
+    async function checkOwner() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
+      if (data?.role === 'owner') setIsOwner(true)
+    }
+    checkOwner()
+  }, [])
 
   async function loadProfile() {
     setLoading(true)
@@ -172,6 +188,59 @@ export default function ProfilePage() {
     await refetchProfile()
     setEditing(false)
     setSaving(false)
+  }
+
+  async function grantAdmin() {
+    if (!grantEmail.trim()) return
+    setGranting(true); setGrantMsg('')
+    // Look up the user
+    const { data: target } = await supabase.from('profiles')
+      .select('id, full_name, role').eq('email', grantEmail.trim().toLowerCase()).maybeSingle()
+    if (!target) {
+      setGrantMsg('Not found — make sure they have signed up first.')
+      setGranting(false); return
+    }
+    if (target.role === 'admin' || target.role === 'owner') {
+      setGrantMsg(target.full_name + ' already has elevated access.')
+      setGranting(false); return
+    }
+    // Call edge function (server-side role change)
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/set-admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ target_user_id: target.id, new_role: 'admin' }),
+    })
+    const result = await res.json()
+    if (!res.ok) {
+      setGrantMsg('Error: ' + (result.error || res.statusText))
+    } else {
+      setGrantMsg(target.full_name + ' is now an admin!')
+      setGrantEmail('')
+    }
+    setGranting(false)
+  }
+
+  async function revokeAdmin(userId, name) {
+    setGranting(true); setGrantMsg('')
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/set-admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ target_user_id: userId, new_role: 'user' }),
+    })
+    const result = await res.json()
+    if (!res.ok) setGrantMsg('Error: ' + (result.error || res.statusText))
+    else setGrantMsg(name + ' admin access revoked.')
+    setGranting(false)
   }
 
   async function deleteAccount() {

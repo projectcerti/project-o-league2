@@ -4,8 +4,6 @@ import { useApp } from '../App'
 import { getCurrentWeek, getWeekLabel, calculatePoints, TOTAL_WEEKS } from '../utils/points'
 import { Avatar } from './Feed'
 
-const OWNER_EMAIL = 'projectcertii@gmail.com'
-
 export default function AdminPanel() {
   const { profile } = useApp()
   const [myEmail, setMyEmail] = useState('')
@@ -24,10 +22,17 @@ export default function AdminPanel() {
   const [grantMsg, setGrantMsg] = useState('')
   const currentWeek = getCurrentWeek()
 
+  const [isOwner, setIsOwner] = useState(false)
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    async function checkRole() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
+      if (data?.role === 'owner') setIsOwner(true)
       setMyEmail(session?.user?.email?.toLowerCase() || '')
-    })
+    }
+    checkRole()
   }, [])
 
   useEffect(() => { loadData() }, [tab])
@@ -140,7 +145,7 @@ export default function AdminPanel() {
           { id: 'metrics',  label: '📊 Metrics' },
           { id: 'feedback', label: '💬 Feedback' },
           { id: 'logs',     label: '📋 Logs' },
-          ...(myEmail === OWNER_EMAIL ? [{ id: 'access', label: '🔑 Access' }] : []),
+          ...(isOwner ? [{ id: 'access', label: '🔑 Access' }] : []),
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`px-4 py-2 rounded-2xl text-sm font-kanit font-semibold uppercase whitespace-nowrap transition-all flex-shrink-0 ${
@@ -339,7 +344,7 @@ export default function AdminPanel() {
       )}
 
       {/* ── ACCESS TAB (owner only) ── */}
-      {tab === 'access' && myEmail === OWNER_EMAIL && (
+      {tab === 'access' && isOwner && (
         <div className="space-y-4">
           {/* Grant admin */}
           <div className="bg-card border border-lime/20 rounded-3xl p-4 space-y-3">

@@ -24,7 +24,8 @@ export default function Navbar() {
     { to: '/targets',    icon: 'targets',   label: 'Targets' },
     { to: profilePath,   icon: 'user',      label: 'Me' },
   ]
-  const tabs = profile?.is_admin
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'owner'
+  const tabs = isAdmin
     ? [baseTabs[0], baseTabs[1], baseTabs[2], { to: '/admin', icon: 'user', label: 'Admin' }, baseTabs[4]]
     : baseTabs
 
@@ -68,7 +69,7 @@ export default function Navbar() {
       <div className="md:hidden sticky top-0 z-50 bg-bg/98 backdrop-blur border-b border-border px-5 h-11 flex items-center justify-between">
         <img src="/logo.png" alt="Project Challenge" className="h-7 w-auto max-w-[160px] object-contain" />
         <div className="flex items-center gap-2">
-          {profile?.is_admin && (
+          {isAdmin && (
             <Link to="/admin" className="text-xs text-lime font-dm bg-lime/10 px-2.5 py-1 rounded-full">Admin</Link>
           )}
         </div>
