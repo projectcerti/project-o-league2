@@ -52,7 +52,7 @@ export default function AdminPanel() {
     setGranting(true)
     setGrantMsg('')
     const { data } = await supabase.from('profiles').select('id, full_name').eq('email', grantEmail.trim().toLowerCase()).maybeSingle()
-    if (!data) { setGrantMsg('❌ User not found. Make sure they've signed up.'); setGranting(false); return }
+    if (!data) { setGrantMsg('User not found. Make sure they have signed up.'); setGranting(false); return }
     await supabase.from('profiles').update({ is_admin: true }).eq('id', data.id)
     setGrantMsg(`✓ ${data.full_name} is now an admin.`)
     setGrantEmail('')
