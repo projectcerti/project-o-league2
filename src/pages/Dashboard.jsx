@@ -22,12 +22,25 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: subs }, { data: lb }] = await Promise.all([
+      const [{ data: subs }, { data: profiles }, { data: mySubs }] = await Promise.all([
+        supabase.from('weekly_submissions').select('user_id, calculated_points, admin_override_points'),
+        supabase.from('profiles').select('id, full_name, username, avatar_url'),
         supabase.from('weekly_submissions').select('*').eq('user_id', profile.id),
-        supabase.from('leaderboard_cache').select('*').order('rank').limit(3),
       ])
-      setSubmissions(subs || [])
-      setTopThree(lb || [])
+
+      // Build live leaderboard
+      const pointsMap = {}
+      for (const s of subs || []) {
+        const pts = s.admin_override_points ?? s.calculated_points ?? 0
+        pointsMap[s.user_id] = (pointsMap[s.user_id] || 0) + pts
+      }
+      const top3 = (profiles || [])
+        .map(p => ({ ...p, total_points: pointsMap[p.id] || 0 }))
+        .sort((a, b) => b.total_points - a.total_points)
+        .slice(0, 3)
+
+      setSubmissions(mySubs || [])
+      setTopThree(top3)
       setLoading(false)
     }
     load()

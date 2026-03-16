@@ -48,27 +48,46 @@ export default function Leaderboard() {
 
   useEffect(() => {
     loadOverall()
-    // Real-time subscription
+    // Real-time: reload when weekly_submissions changes (live points)
     const channel = supabase.channel('leaderboard-live')
       .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'leaderboard_cache'
+        event: '*', schema: 'public', table: 'weekly_submissions'
       }, () => loadOverall())
       .subscribe()
-    // Polling fallback every 30 seconds
-    const poll = setInterval(() => loadOverall(), 30000)
-    return () => {
-      supabase.removeChannel(channel)
-      clearInterval(poll)
-    }
+    return () => supabase.removeChannel(channel)
   }, [])
 
   useEffect(() => { if (tab !== 'overall') loadWeek(tab) }, [tab])
 
   async function loadOverall() {
     setLoading(true)
-    const { data } = await supabase.from('leaderboard_cache').select('*').order('rank')
-    setRows(data || [])
-    if (data?.[0]?.last_refreshed) setLastRefreshed(data[0].last_refreshed)
+    // Read directly from weekly_submissions — always live, no cache delay
+    const [{ data: subs }, { data: profiles }] = await Promise.all([
+      supabase.from('weekly_submissions').select('user_id, calculated_points, admin_override_points'),
+      supabase.from('profiles').select('id, full_name, username, avatar_url'),
+    ])
+
+    // Sum points per user
+    const pointsMap = {}
+    for (const s of subs || []) {
+      const pts = s.admin_override_points ?? s.calculated_points ?? 0
+      pointsMap[s.user_id] = (pointsMap[s.user_id] || 0) + pts
+    }
+
+    // Build rows with profile info, sorted by points
+    const built = (profiles || [])
+      .map(p => ({
+        user_id: p.id,
+        full_name: p.full_name,
+        username: p.username,
+        avatar_url: p.avatar_url,
+        total_points: pointsMap[p.id] || 0,
+      }))
+      .sort((a, b) => b.total_points - a.total_points)
+      .map((r, i) => ({ ...r, rank: i + 1 }))
+
+    setRows(built)
+    setLastRefreshed(new Date().toISOString())
     setLoading(false)
   }
 

@@ -29,6 +29,8 @@ export default function ProfilePage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting]         = useState(false)
   const [adminFeedback, setAdminFeedback] = useState([])
+  const [mySessions, setMySessions] = useState([])
+  const [deletingSessionId, setDeletingSessionId] = useState(null)
   const [showGrantAdmin, setShowGrantAdmin] = useState(false)
   const [grantEmail, setGrantEmail] = useState('')
   const [granting, setGranting] = useState(false)
@@ -139,6 +141,14 @@ export default function ProfilePage() {
         submitted: subs.length,
       })
 
+      // Load sessions for own profile
+      if (found.id === myProfile.id) {
+        const { data: sess } = await supabase.from('sessions')
+          .select('*').eq('user_id', found.id)
+          .order('logged_at', { ascending: false })
+        setMySessions(sess || [])
+      }
+
       // Load private admin feedback (only if viewing own profile)
       if (found.id === myProfile.id) {
         const { data: fb } = await supabase.from('admin_feedback')
@@ -234,6 +244,35 @@ export default function ProfilePage() {
     await refetchProfile()
     setEditing(false)
     setSaving(false)
+  }
+
+  async function deleteSessionFromProfile(id) {
+    setDeletingSessionId(id)
+    await supabase.from('sessions').delete().eq('id', id)
+    await supabase.from('posts').delete().eq('session_id', id).eq('user_id', myProfile.id)
+    // Recalculate points
+    const { data: remaining } = await supabase.from('sessions').select('*').eq('user_id', myProfile.id)
+    const { data: subs } = await supabase.from('weekly_submissions').select('*').eq('user_id', myProfile.id)
+    // Update each affected week
+    const weekNums = [...new Set((remaining || []).map(s => s.week_number))]
+    for (const wk of weekNums) {
+      const wSess = (remaining || []).filter(s => s.week_number === wk)
+      const w = wSess.filter(s => s.session_type === 'workout' && s.duration_minutes >= 30).length
+      const r = wSess.filter(s => s.session_type === 'recovery' && s.duration_minutes >= 20).length
+      const soc = wSess.filter(s => s.session_type === 'social').length
+      const nutDays = new Set(wSess.filter(s => s.session_type === 'nutrition' && s.goal_met).map(s => new Date(s.logged_at).toDateString())).size
+      const { calculatePoints } = await import('../utils/points')
+      const pts = calculatePoints({ workouts: w, recovery_sessions: r, social_sessions: soc, nutrition_days: nutDays })
+      const sub = (subs || []).find(s => s.week_number === wk)
+      if (sub) {
+        await supabase.from('weekly_submissions').update({
+          workouts: w, recovery_sessions: r, social_sessions: soc,
+          nutrition_days: nutDays, calculated_points: pts,
+        }).eq('id', sub.id)
+      }
+    }
+    setMySessions(prev => prev.filter(s => s.id !== id))
+    setDeletingSessionId(null)
   }
 
   async function saveGoals() {
@@ -547,14 +586,14 @@ export default function ProfilePage() {
         <>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {(isMe
-              ? ['posts', 'stats', 'my stats', ...(adminFeedback.length > 0 ? ['feedback'] : [])]
+              ? ['posts', 'logs', 'stats', 'my stats', ...(adminFeedback.length > 0 ? ['feedback'] : [])]
               : ['posts', 'stats']
             ).map(t => (
               <button key={t} onClick={() => setActiveTab(t)}
                 className={`px-4 py-2 rounded-2xl text-sm font-kanit font-semibold uppercase transition-all flex-shrink-0 ${
                   activeTab === t ? 'bg-lime text-bg' : 'bg-card border border-border text-muted hover:text-white'
                 }`}>
-                {t === 'posts' ? `POSTS (${posts.length})` : t === 'my stats' ? 'MY STATS' : t === 'feedback' ? `💬 NOTES (${adminFeedback.length})` : 'SEASON'}
+                {t === 'posts' ? `POSTS (${posts.length})` : t === 'logs' ? `LOGS (${mySessions.length})` : t === 'my stats' ? 'MY STATS' : t === 'feedback' ? `💬 NOTES (${adminFeedback.length})` : 'SEASON'}
               </button>
             ))}
           </div>
