@@ -151,15 +151,16 @@ export default function LogActivity() {
   }
 
   async function syncWeeklySubmission(nutrDays) {
-    const { data: latestSessions } = await supabase.from('sessions').select('*')
-      .eq('user_id', profile.id).eq('week_number', weekNum)
+    // Always fetch fresh data from DB — never rely on stale state
+    const [{ data: latestSessions }, { data: existingSub }] = await Promise.all([
+      supabase.from('sessions').select('*').eq('user_id', profile.id).eq('week_number', weekNum),
+      supabase.from('weekly_submissions').select('*').eq('user_id', profile.id).eq('week_number', weekNum).maybeSingle(),
+    ])
     const s   = latestSessions || []
     const w   = s.filter(x => x.session_type === 'workout'  && x.duration_minutes >= 30).length
     const r   = s.filter(x => x.session_type === 'recovery' && x.duration_minutes >= 20).length
     const soc = s.filter(x => x.session_type === 'social').length
-    // Calc nutrition days from distinct days
     const nutSessions = s.filter(x => x.session_type === 'nutrition')
-    // Only count days where goal was met (or if no goals set, count all logged days)
     const hasGoals = Object.keys(nutritionGoals || {}).length > 0
     const goalMetSessions = nutSessions.filter(x => hasGoals ? x.goal_met : true)
     const nd = nutrDays !== undefined ? nutrDays : new Set(goalMetSessions.map(x => new Date(x.logged_at).toDateString())).size
@@ -168,15 +169,17 @@ export default function LogActivity() {
       user_id: profile.id, week_number: weekNum,
       workouts: w, recovery_sessions: r, social_sessions: soc,
       nutrition_days: nd, calculated_points: calc,
-      status: weekSub?.status === 'approved' ? 'approved' : 'submitted',
-      submitted_at: weekSub?.submitted_at || new Date().toISOString(),
+      status: existingSub?.status === 'approved' ? 'approved' : 'submitted',
+      submitted_at: existingSub?.submitted_at || new Date().toISOString(),
     }
-    if (weekSub) {
-      await supabase.from('weekly_submissions').update(payload).eq('id', weekSub.id)
+    if (existingSub) {
+      await supabase.from('weekly_submissions').update(payload).eq('id', existingSub.id)
     } else if (s.length > 0 || nd > 0) {
       await supabase.from('weekly_submissions').insert(payload)
     }
-    // Refresh leaderboard cache immediately so points show up
+    // Update local state so subsequent syncs in same session know the row exists
+    setWeekSub(existingSub || { ...payload })
+    // Refresh leaderboard cache immediately
     await supabase.rpc('refresh_leaderboard_cache').catch(() => {})
   }
 
