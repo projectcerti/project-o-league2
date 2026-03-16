@@ -98,9 +98,13 @@ export default function LogActivity() {
     setSessions(sesh || [])
     setNutritionLogs(nutLogs || [])
     setWeekSub(sub)
-    // Load user's nutrition goals
-    const { data: prof } = await supabase.from('profiles').select('nutrition_goals').eq('id', profile.id).single()
-    setNutritionGoals(prof?.nutrition_goals || {})
+    // Load user's nutrition goals (resilient — column may not exist yet)
+    try {
+      const { data: prof } = await supabase.from('profiles').select('nutrition_goals').eq('id', profile.id).single()
+      setNutritionGoals(prof?.nutrition_goals || {})
+    } catch(e) {
+      setNutritionGoals({})
+    }
     setLoading(false)
   }
 
@@ -172,6 +176,8 @@ export default function LogActivity() {
     } else if (s.length > 0 || nd > 0) {
       await supabase.from('weekly_submissions').insert(payload)
     }
+    // Refresh leaderboard cache immediately so points show up
+    await supabase.rpc('refresh_leaderboard_cache').catch(() => {})
   }
 
   async function addSession() {
@@ -223,7 +229,7 @@ export default function LogActivity() {
       notes: nutForm.notes || null,
       tracking_link: nutForm.tracking_link || null,
       photo_urls: uploadedUrls.length > 0 ? uploadedUrls : null,
-      goal_met: nutForm.goal_met,
+      ...(nutForm.goal_met !== undefined ? { goal_met: nutForm.goal_met } : {}),
     })
     if (nutErr) { setNutError(nutErr.message); setSavingNut(false); return }
 

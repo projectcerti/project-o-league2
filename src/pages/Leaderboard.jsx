@@ -46,7 +46,22 @@ export default function Leaderboard() {
   const [loading, setLoading] = useState(true)
   const currentWeek = getCurrentWeek()
 
-  useEffect(() => { loadOverall() }, [])
+  useEffect(() => {
+    loadOverall()
+    // Real-time subscription
+    const channel = supabase.channel('leaderboard-live')
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'leaderboard_cache'
+      }, () => loadOverall())
+      .subscribe()
+    // Polling fallback every 30 seconds
+    const poll = setInterval(() => loadOverall(), 30000)
+    return () => {
+      supabase.removeChannel(channel)
+      clearInterval(poll)
+    }
+  }, [])
+
   useEffect(() => { if (tab !== 'overall') loadWeek(tab) }, [tab])
 
   async function loadOverall() {
