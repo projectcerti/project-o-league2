@@ -5,36 +5,8 @@ import { useApp } from '../App'
 import { getCurrentWeek, TOTAL_WEEKS } from '../utils/points'
 import { Avatar } from './Feed'
 
-function RankedAvatar({ name, avatarUrl, rank, size = 'sm', animated = false }) {
-  const [flames, setFlames] = useState(false)
-
-  function handleClick() {
-    if (rank !== 1) return
-    setFlames(true)
-    setTimeout(() => setFlames(false), 1500)
-  }
-
-  return (
-    <div className="relative cursor-pointer" onClick={handleClick}>
-      <Avatar name={name} avatarUrl={avatarUrl} size={size} />
-      {rank === 1 && flames && (
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center animate-ping-once">
-          <div className="absolute inset-0 rounded-2xl overflow-hidden">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <span key={i} className="flame-particle" style={{
-                position: 'absolute',
-                left: `${10 + i * 10}%`,
-                bottom: 0,
-                fontSize: `${12 + Math.random() * 8}px`,
-                animation: `flameRise ${0.6 + Math.random() * 0.9}s ease-out forwards`,
-                animationDelay: `${i * 0.08}s`,
-              }}>🔥</span>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
+function RankedAvatar({ name, avatarUrl, rank, size = 'sm' }) {
+  return <Avatar name={name} avatarUrl={avatarUrl} size={size} />
 }
 
 export default function Leaderboard() {
