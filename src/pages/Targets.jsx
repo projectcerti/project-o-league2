@@ -58,12 +58,6 @@ export default function Targets() {
   const weeksLogged = submissions.length
   const weeksRemaining = TOTAL_WEEKS - currentWeek
 
-  if (loading) return (
-    <div className="space-y-3 pt-2 animate-pulse">
-      {[...Array(5)].map((_, i) => <div key={i} className="h-20 bg-card rounded-3xl" />)}
-    </div>
-  )
-
   return (
     <div className="space-y-3 pt-1 fade-up">
 

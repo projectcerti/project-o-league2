@@ -31,12 +31,6 @@ export default function Notifications() {
 
   const typeIcon = { like: '❤️', comment: '💬', follow: '👤', post: '📣', log: '📋', overtaken: '⚡' }
 
-  if (loading) return (
-    <div className="max-w-2xl mx-auto space-y-2 pt-2 animate-pulse">
-      {[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-card rounded-3xl" />)}
-    </div>
-  )
-
   return (
     <div className="max-w-2xl mx-auto space-y-2 pt-1 fade-up">
       <h1 className="font-kanit font-bold italic uppercase text-2xl text-white py-1">NOTIFICATIONS</h1>

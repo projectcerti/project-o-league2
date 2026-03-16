@@ -125,12 +125,6 @@ export default function AdminPanel() {
     none:      { label: '👋 Not started', bg: 'bg-soft border-border',          text: 'text-muted' },
   }
 
-  if (initialLoad && loading) return (
-    <div className="max-w-3xl mx-auto space-y-3 pt-2 animate-pulse">
-      {[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-card rounded-3xl" />)}
-    </div>
-  )
-
   const admins = users.filter(u => u.is_admin)
   const metricsUsers = [...users].sort((a, b) => {
     const sa = getUserMetrics(a.id), sb = getUserMetrics(b.id)

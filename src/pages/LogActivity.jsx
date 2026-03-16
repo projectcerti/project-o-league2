@@ -267,12 +267,6 @@ export default function LogActivity() {
 
   const selectedType = SESSION_TYPES.find(t => t.value === form.session_type)
 
-  if (loading) return (
-    <div className="space-y-3 animate-pulse max-w-2xl mx-auto pt-2">
-      {[...Array(3)].map((_, i) => <div key={i} className="h-20 bg-card rounded-3xl" />)}
-    </div>
-  )
-
   return (
     <div className="max-w-2xl mx-auto space-y-3 pt-1 fade-up">
 

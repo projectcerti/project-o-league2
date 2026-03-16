@@ -382,13 +382,6 @@ export default function ProfilePage() {
     await supabase.auth.signOut()
   }
 
-  if (loading) return (
-    <div className="max-w-2xl mx-auto space-y-3 pt-2 animate-pulse">
-      <div className="h-36 bg-card rounded-3xl" />
-      <div className="h-24 bg-card rounded-3xl" />
-    </div>
-  )
-
   if (!user) return null
   const lane = getLane(user.lane)
 
