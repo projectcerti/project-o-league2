@@ -16,6 +16,7 @@ export default function Leaderboard() {
   const [weekRows, setWeekRows] = useState([])
   const [lastRefreshed, setLastRefreshed] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [tabLoading, setTabLoading] = useState(false)
   const currentWeek = getCurrentWeek()
 
   useEffect(() => {
@@ -69,8 +70,8 @@ export default function Leaderboard() {
   }
 
   async function loadWeek(weekNum) {
-    setLoading(true)
     setWeekRows([])
+    setTabLoading(true)
 
     const [{ data: subs }, { data: profiles }] = await Promise.all([
       supabase.from('weekly_submissions')
@@ -79,7 +80,6 @@ export default function Leaderboard() {
       supabase.from('profiles').select('id, full_name, username, avatar_url'),
     ])
 
-    // Build a profile lookup map
     const profileMap = {}
     for (const p of profiles || []) profileMap[p.id] = p
 
@@ -96,7 +96,7 @@ export default function Leaderboard() {
       .map((r, i) => ({ ...r, rank: i + 1 }))
 
     setWeekRows(built)
-    setLoading(false)
+    setTabLoading(false)
   }
 
   const displayRows = tab === 'overall' ? rows : weekRows
@@ -137,15 +137,14 @@ export default function Leaderboard() {
         ))}
       </div>
 
-      {/* Top 3 podium — clean, no boxes */}
+      {/* Top 3 podium */}
       {!loading && displayRows.length >= 3 && (
-        <div className="grid grid-cols-3 gap-2 py-2">
+        <div className="grid grid-cols-3 gap-2 py-2 items-end">
           {[displayRows[1], displayRows[0], displayRows[2]].map((row, i) => {
             const pos = [2, 1, 3][i]
-            const heightClass = ['mt-4', 'mt-0', 'mt-8'][i]
             return (
               <Link key={row?.user_id} to={`/profile/${row?.username || row?.user_id}`}
-                className={`flex flex-col items-center gap-1.5 group ${heightClass}`}>
+                className="flex flex-col items-center gap-1.5 group">
                 <RankedAvatar name={row?.full_name} avatarUrl={row?.avatar_url} rank={pos} size={pos === 1 ? 'lg' : 'md'} />
                 <span className="text-xl">{pos === 1 ? '🥇' : pos === 2 ? '🥈' : '🥉'}</span>
                 <p className="text-xs font-dm font-medium text-center truncate w-full group-hover:text-lime transition-colors">
@@ -162,7 +161,7 @@ export default function Leaderboard() {
 
       {/* Full list */}
       <div className="bg-card border border-border rounded-3xl overflow-hidden shadow-card">
-        {loading ? (
+        {(loading || tabLoading) ? (
           <div className="p-5 space-y-3">
             {[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-soft rounded-2xl animate-pulse" />)}
           </div>
