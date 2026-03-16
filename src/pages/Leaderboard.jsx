@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useApp } from '../App'
-import { getCurrentWeek, TOTAL_WEEKS } from '../utils/points'
+import { getCurrentWeek } from '../utils/points'
 import { Avatar } from './Feed'
 
 
@@ -14,99 +14,62 @@ export default function Leaderboard() {
   const { profile } = useApp()
   const [tab, setTab] = useState('overall')
   const [rows, setRows] = useState(_cache.rows)
-  const [weekRows, setWeekRows] = useState([])
-  const [lastRefreshed, setLastRefreshed] = useState(_cache.lastRefreshed)
-  const [loading, setLoading] = useState(_cache.rows.length === 0)
+  const [weekRows, setWeekRows] = useState({})
   const currentWeek = getCurrentWeek()
-
-  useEffect(() => {
-    if (tab === 'overall') loadOverall()
-    else loadWeek(tab)
-  }, [tab])
 
   useEffect(() => {
     loadOverall()
     const channel = supabase.channel('leaderboard-live')
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'weekly_submissions'
-      }, () => { if (tab === 'overall') loadOverall() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_submissions' },
+        () => loadOverall())
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [])
 
+  useEffect(() => {
+    if (tab !== 'overall' && !_cache.weekRows[tab]) loadWeek(tab)
+    else if (tab !== 'overall') setWeekRows(wr => ({ ...wr, [tab]: _cache.weekRows[tab] }))
+  }, [tab])
+
   async function loadOverall() {
-    if (_cache.rows.length === 0) setLoading(true)
-    // Read directly from weekly_submissions — always live, no cache delay
     const [{ data: subs }, { data: profiles }] = await Promise.all([
       supabase.from('weekly_submissions').select('user_id, calculated_points, admin_override_points'),
       supabase.from('profiles').select('id, full_name, username, avatar_url'),
     ])
-
-    // Sum points per user
     const pointsMap = {}
     for (const s of subs || []) {
       const pts = s.admin_override_points ?? s.calculated_points ?? 0
       pointsMap[s.user_id] = (pointsMap[s.user_id] || 0) + pts
     }
-
-    // Build rows with profile info, sorted by points
     const built = (profiles || [])
-      .map(p => ({
-        user_id: p.id,
-        full_name: p.full_name,
-        username: p.username,
-        avatar_url: p.avatar_url,
-        total_points: pointsMap[p.id] || 0,
-      }))
+      .map(p => ({ user_id: p.id, full_name: p.full_name, username: p.username, avatar_url: p.avatar_url, total_points: pointsMap[p.id] || 0 }))
       .sort((a, b) => b.total_points - a.total_points)
       .map((r, i) => ({ ...r, rank: i + 1 }))
-
     _cache.rows = built
-    _cache.lastRefreshed = new Date().toISOString()
     setRows(built)
-    setLastRefreshed(_cache.lastRefreshed)
-    setLoading(false)
   }
 
   async function loadWeek(weekNum) {
-    if (_cache.weekRows[weekNum]) setWeekRows(_cache.weekRows[weekNum])
     const [{ data: subs }, { data: profiles }] = await Promise.all([
-      supabase.from('weekly_submissions')
-        .select('user_id, calculated_points, admin_override_points, status')
-        .eq('week_number', weekNum),
+      supabase.from('weekly_submissions').select('user_id, calculated_points, admin_override_points, status').eq('week_number', weekNum),
       supabase.from('profiles').select('id, full_name, username, avatar_url'),
     ])
-
     const profileMap = {}
     for (const p of profiles || []) profileMap[p.id] = p
-
     const built = (subs || [])
-      .map(d => ({
-        user_id: d.user_id,
-        full_name: profileMap[d.user_id]?.full_name || 'Unknown',
-        username: profileMap[d.user_id]?.username,
-        avatar_url: profileMap[d.user_id]?.avatar_url,
-        total_points: d.admin_override_points ?? d.calculated_points ?? 0,
-        status: d.status,
-      }))
+      .map(d => ({ user_id: d.user_id, full_name: profileMap[d.user_id]?.full_name || 'Unknown', username: profileMap[d.user_id]?.username, avatar_url: profileMap[d.user_id]?.avatar_url, total_points: d.admin_override_points ?? d.calculated_points ?? 0, status: d.status }))
       .sort((a, b) => b.total_points - a.total_points)
       .map((r, i) => ({ ...r, rank: i + 1 }))
-
     _cache.weekRows[weekNum] = built
-    setWeekRows(built)
+    setWeekRows(wr => ({ ...wr, [weekNum]: built }))
   }
 
-  const displayRows = tab === 'overall' ? rows : weekRows
+  const displayRows = tab === 'overall' ? rows : (weekRows[tab] || _cache.weekRows[tab] || [])
   const myRow = displayRows.find(r => r.user_id === profile.id)
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between pt-1">
-        <h1 className="font-kanit font-bold italic uppercase text-2xl text-white">LEADERBOARD</h1>
-        {lastRefreshed && tab === 'overall' && (
-          <p className="text-xs text-muted font-dm">Updated {formatTime(lastRefreshed)}</p>
-        )}
-      </div>
+    <div className="space-y-4 fade-up">
+      <h1 className="font-kanit font-bold italic uppercase text-2xl text-white pt-1">LEADERBOARD</h1>
 
       {/* My position */}
       {myRow && (
@@ -118,11 +81,6 @@ export default function Leaderboard() {
               <p className="text-xs text-muted font-dm">{myRow.total_points} pts</p>
             </div>
           </div>
-          {tab === 'overall' && myRow.previous_rank > 0 && myRow.rank !== myRow.previous_rank && (
-            <span className={`text-sm font-kanit font-semibold ${myRow.rank < myRow.previous_rank ? 'text-lime' : 'text-red-400'}`}>
-              {myRow.rank < myRow.previous_rank ? `↑${myRow.previous_rank - myRow.rank}` : `↓${myRow.rank - myRow.previous_rank}`}
-            </span>
-          )}
         </div>
       )}
 
@@ -135,7 +93,7 @@ export default function Leaderboard() {
       </div>
 
       {/* Top 3 podium */}
-      {!loading && displayRows.length >= 3 && (
+      {displayRows.length >= 3 && (
         <div className="grid grid-cols-3 gap-2 py-2 items-end">
           {[displayRows[1], displayRows[0], displayRows[2]].map((row, i) => {
             const pos = [2, 1, 3][i]
@@ -158,17 +116,12 @@ export default function Leaderboard() {
 
       {/* Full list */}
       <div className="bg-card border border-border rounded-3xl overflow-hidden shadow-card">
-        {loading ? (
-          <div className="p-5 space-y-3">
-            {[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-soft rounded-2xl animate-pulse" />)}
-          </div>
-        ) : displayRows.length === 0 ? (
-          <div className="p-8 text-center text-muted text-sm font-dm">No data yet.</div>
+        {displayRows.length === 0 ? (
+          <div className="p-8 text-center text-muted text-sm font-dm">Loading…</div>
         ) : (
           <div className="divide-y divide-border/50">
             {displayRows.map((row, idx) => {
               const isMe = row.user_id === profile.id
-              const rankChange = tab === 'overall' && row.previous_rank > 0 ? row.previous_rank - row.rank : 0
               return (
                 <Link key={row.user_id} to={`/profile/${row.username || row.user_id}`}
                   className={`px-5 py-3.5 flex items-center gap-3 transition-colors ${isMe ? 'bg-lime/5' : 'hover:bg-soft'}`}>
@@ -182,11 +135,6 @@ export default function Leaderboard() {
                     </p>
                     {row.username && <p className="text-xs text-muted font-dm">@{row.username}</p>}
                   </div>
-                  {rankChange !== 0 && (
-                    <span className={`text-xs font-kanit font-semibold ${rankChange > 0 ? 'text-lime' : 'text-red-400'}`}>
-                      {rankChange > 0 ? `↑${rankChange}` : `↓${Math.abs(rankChange)}`}
-                    </span>
-                  )}
                   <span className="font-kanit font-bold italic uppercase text-xl text-white">{row.total_points}</span>
                 </Link>
               )
