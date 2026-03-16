@@ -442,6 +442,106 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {/* Nutrition Goals — own profile only */}
+      {isMe && !editing && (
+        <div className="mt-1">
+          <button onClick={() => setShowGoalsEditor(v => !v)}
+            className="w-full flex items-center justify-between bg-card border border-border rounded-2xl px-4 py-3 hover:border-lime/20 transition-all">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🥗</span>
+              <div className="text-left">
+                <p className="text-sm font-kanit font-semibold text-white uppercase">Nutrition Goals</p>
+                <p className="text-xs text-muted font-dm">
+                  {Object.keys(nutritionGoals).filter(k => nutritionGoals[k] && !k.includes('_name')).length > 0
+                    ? `${Object.keys(nutritionGoals).filter(k => nutritionGoals[k] && !k.includes('_name')).length} goal${Object.keys(nutritionGoals).filter(k => nutritionGoals[k] && !k.includes('_name')).length !== 1 ? 's' : ''} set · ${goalsPublic ? 'Public' : 'Private'}`
+                    : 'Tap to set your daily goals'}
+                </p>
+              </div>
+            </div>
+            <span className="text-muted text-sm">{showGoalsEditor ? '▲' : '▼'}</span>
+          </button>
+
+          {showGoalsEditor && (
+            <div className="bg-card border border-border rounded-3xl p-4 mt-2 space-y-4">
+              <p className="text-xs text-muted font-dm">Set goals to hit each day. Tick goal completion when logging nutrition to earn points. Leave blank to skip.</p>
+
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { key: 'protein',  label: 'Protein',  placeholder: 'e.g. 180g' },
+                  { key: 'calories', label: 'Calories', placeholder: 'e.g. 2200 kcal' },
+                  { key: 'water',    label: 'Water',    placeholder: 'e.g. 2-3L' },
+                  { key: 'fibre',    label: 'Fibre',    placeholder: 'e.g. 30g' },
+                  { key: 'carbs',    label: 'Carbs',    placeholder: 'e.g. 250g' },
+                  { key: 'fat',      label: 'Fat',      placeholder: 'e.g. 70g' },
+                ].map(({ key, label, placeholder }) => (
+                  <div key={key}>
+                    <p className="text-xs font-dm text-muted mb-1">{label}</p>
+                    <input type="text" value={goalsForm[key]}
+                      onChange={e => setGoalsForm(f => ({ ...f, [key]: e.target.value }))}
+                      placeholder={placeholder}
+                      className="w-full bg-soft border border-border rounded-xl px-3 py-2 text-sm text-white placeholder-muted focus:outline-none focus:border-lime/40 font-dm" />
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <p className="text-xs font-dm text-muted uppercase tracking-widest mb-2">CUSTOM GOALS</p>
+                <div className="space-y-2">
+                  {[['custom1', 'Custom 1'], ['custom2', 'Custom 2']].map(([key, label]) => (
+                    <div key={key} className="flex gap-2">
+                      <input type="text" value={goalsForm[`${key}_name`]}
+                        onChange={e => setGoalsForm(f => ({ ...f, [`${key}_name`]: e.target.value }))}
+                        placeholder="Goal name"
+                        className="flex-1 bg-soft border border-border rounded-xl px-3 py-2 text-sm text-white placeholder-muted focus:outline-none focus:border-lime/40 font-dm" />
+                      <input type="text" value={goalsForm[`${key}_value`]}
+                        onChange={e => setGoalsForm(f => ({ ...f, [`${key}_value`]: e.target.value }))}
+                        placeholder="Target"
+                        className="w-24 bg-soft border border-border rounded-xl px-3 py-2 text-sm text-white placeholder-muted focus:outline-none focus:border-lime/40 font-dm" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-dm text-muted uppercase tracking-widest mb-2">VISIBILITY</p>
+                <div className="flex gap-2">
+                  {[
+                    { val: false, label: 'Private', desc: 'Only you and admin', icon: '🔒' },
+                    { val: true,  label: 'Public',  desc: 'Show on my profile', icon: '👥' },
+                  ].map(({ val, label, desc, icon }) => (
+                    <button key={label} onClick={() => setGoalsPublic(val)}
+                      className={`flex-1 rounded-2xl p-3 border text-left transition-all ${goalsPublic === val ? 'border-lime/40 bg-lime/10' : 'border-border hover:border-lime/20'}`}>
+                      <p className="text-base">{icon}</p>
+                      <p className={`text-xs font-kanit font-semibold uppercase mt-1 ${goalsPublic === val ? 'text-lime' : 'text-white'}`}>{label}</p>
+                      <p className="text-xs text-muted font-dm">{desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button onClick={saveGoals} disabled={savingGoals}
+                className="w-full bg-lime text-bg font-kanit font-bold uppercase py-3 rounded-2xl disabled:opacity-40 active:scale-95 transition-all shadow-lime-sm">
+                {savingGoals ? 'SAVING…' : 'SAVE GOALS'}
+              </button>
+            </div>
+          )}
+
+          {!showGoalsEditor && Object.keys(nutritionGoals).filter(k => nutritionGoals[k] && !k.includes('_name')).length > 0 && (
+            <div className="mt-2 bg-card border border-border rounded-2xl px-4 py-3 flex flex-wrap gap-2">
+              {Object.entries(nutritionGoals)
+                .filter(([k, v]) => v && !k.includes('_name'))
+                .map(([key, value]) => (
+                  <span key={key} className="bg-soft border border-border rounded-full px-3 py-1 text-xs font-dm">
+                    <span className="text-muted capitalize">{key.replace(/_/g, ' ')}: </span>
+                    <span className="text-white">{value}</span>
+                  </span>
+                ))}
+              {!goalsPublic && <span className="text-xs text-muted font-dm self-center">🔒 Private</span>}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Tabs */}
       {!editing && (
         <>
