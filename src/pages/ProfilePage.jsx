@@ -91,7 +91,7 @@ export default function ProfilePage() {
         { data: myNotify },
       ] = await Promise.all([
         supabase.from('posts')
-          .select('*, profiles(id, full_name, username, avatar_url)')
+          .select('*, profiles(id, full_name, username, avatar_url), session_id')
           .eq('user_id', found.id)
           .order('created_at', { ascending: false })
           .limit(20),
@@ -250,28 +250,45 @@ export default function ProfilePage() {
     setDeletingSessionId(id)
     await supabase.from('sessions').delete().eq('id', id)
     await supabase.from('posts').delete().eq('session_id', id).eq('user_id', myProfile.id)
-    // Recalculate points
-    const { data: remaining } = await supabase.from('sessions').select('*').eq('user_id', myProfile.id)
-    const { data: subs } = await supabase.from('weekly_submissions').select('*').eq('user_id', myProfile.id)
-    // Update each affected week
-    const weekNums = [...new Set((remaining || []).map(s => s.week_number))]
-    for (const wk of weekNums) {
-      const wSess = (remaining || []).filter(s => s.week_number === wk)
-      const w = wSess.filter(s => s.session_type === 'workout' && s.duration_minutes >= 30).length
-      const r = wSess.filter(s => s.session_type === 'recovery' && s.duration_minutes >= 20).length
-      const soc = wSess.filter(s => s.session_type === 'social').length
-      const nutDays = new Set(wSess.filter(s => s.session_type === 'nutrition' && s.goal_met).map(s => new Date(s.logged_at).toDateString())).size
-      const { calculatePoints } = await import('../utils/points')
-      const pts = calculatePoints({ workouts: w, recovery_sessions: r, social_sessions: soc, nutrition_days: nutDays })
-      const sub = (subs || []).find(s => s.week_number === wk)
-      if (sub) {
-        await supabase.from('weekly_submissions').update({
-          workouts: w, recovery_sessions: r, social_sessions: soc,
-          nutrition_days: nutDays, calculated_points: pts,
-        }).eq('id', sub.id)
+    setMySessions(prev => prev.filter(s => s.id !== id))
+    setDeletingSessionId(null)
+  }
+
+  async function deletePostFromProfile(postId, sessionId) {
+    setDeletingSessionId(postId)
+    // Delete the post
+    await supabase.from('posts').delete().eq('id', postId)
+    // If linked to a session, delete that too and recalculate points
+    if (sessionId) {
+      // Get session week before deleting
+      const { data: sess } = await supabase.from('sessions').select('week_number').eq('id', sessionId).maybeSingle()
+      await supabase.from('sessions').delete().eq('id', sessionId)
+      if (sess?.week_number) {
+        // Recalculate points for that week
+        const { data: remaining } = await supabase.from('sessions').select('*')
+          .eq('user_id', myProfile.id).eq('week_number', sess.week_number)
+        const s = remaining || []
+        const w   = s.filter(x => x.session_type === 'workout'  && x.duration_minutes >= 30).length
+        const r   = s.filter(x => x.session_type === 'recovery' && x.duration_minutes >= 20).length
+        const soc = s.filter(x => x.session_type === 'social').length
+        const hasGoals = Object.keys(user?.nutrition_goals || {}).length > 0
+        const nutDays = new Set(
+          s.filter(x => x.session_type === 'nutrition' && (hasGoals ? x.goal_met : true))
+           .map(x => new Date(x.logged_at).toDateString())
+        ).size
+        const { calculatePoints } = await import('../utils/points')
+        const pts = calculatePoints({ workouts: w, recovery_sessions: r, social_sessions: soc, nutrition_days: nutDays })
+        const { data: sub } = await supabase.from('weekly_submissions').select('id')
+          .eq('user_id', myProfile.id).eq('week_number', sess.week_number).maybeSingle()
+        if (sub) {
+          await supabase.from('weekly_submissions').update({
+            workouts: w, recovery_sessions: r, social_sessions: soc,
+            nutrition_days: nutDays, calculated_points: pts,
+          }).eq('id', sub.id)
+        }
       }
     }
-    setMySessions(prev => prev.filter(s => s.id !== id))
+    setPosts(prev => prev.filter(p => p.id !== postId))
     setDeletingSessionId(null)
   }
 
@@ -586,14 +603,14 @@ export default function ProfilePage() {
         <>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {(isMe
-              ? ['posts', 'logs', 'stats', 'my stats', ...(adminFeedback.length > 0 ? ['feedback'] : [])]
+              ? ['posts', 'stats', 'my stats', ...(adminFeedback.length > 0 ? ['feedback'] : [])]
               : ['posts', 'stats']
             ).map(t => (
               <button key={t} onClick={() => setActiveTab(t)}
                 className={`px-4 py-2 rounded-2xl text-sm font-kanit font-semibold uppercase transition-all flex-shrink-0 ${
                   activeTab === t ? 'bg-lime text-bg' : 'bg-card border border-border text-muted hover:text-white'
                 }`}>
-                {t === 'posts' ? `POSTS (${posts.length})` : t === 'logs' ? `LOGS (${mySessions.length})` : t === 'my stats' ? 'MY STATS' : t === 'feedback' ? `💬 NOTES (${adminFeedback.length})` : 'SEASON'}
+                {t === 'posts' ? `POSTS (${posts.length})` : t === 'my stats' ? 'MY STATS' : t === 'feedback' ? `💬 NOTES (${adminFeedback.length})` : 'SEASON'}
               </button>
             ))}
           </div>
@@ -609,11 +626,30 @@ export default function ProfilePage() {
               ) : posts.map(post => (
                 <div key={post.id} className="bg-card border border-border rounded-3xl overflow-hidden">
                   {post.photo_urls?.length > 0 && (
-                    <img src={post.photo_urls[0]} alt="" className="w-full h-48 object-cover" />
+                    <div className={`grid gap-0.5 ${post.photo_urls.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                      {post.photo_urls.slice(0, 2).map((url, i) => (
+                        <img key={i} src={url} alt="" className="w-full h-48 object-cover" />
+                      ))}
+                    </div>
                   )}
                   <div className="p-4">
-                    <p className="text-sm text-gray-200 font-dm leading-relaxed whitespace-pre-wrap">{post.content}</p>
-                    <p className="text-xs text-muted font-dm mt-2">{getTimeAgo(post.created_at)}</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm text-gray-200 font-dm leading-relaxed whitespace-pre-wrap flex-1">{post.content}</p>
+                      {isMe && (
+                        <button
+                          onClick={() => deletePostFromProfile(post.id, post.session_id)}
+                          disabled={deletingSessionId === post.id}
+                          className="text-muted hover:text-red-400 transition-colors text-lg flex-shrink-0 leading-none">
+                          {deletingSessionId === post.id ? '…' : '×'}
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <p className="text-xs text-muted font-dm">{getTimeAgo(post.created_at)}</p>
+                      {post.session_id && (
+                        <span className="text-xs text-muted font-dm bg-soft rounded-full px-2 py-0.5">linked to log</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
