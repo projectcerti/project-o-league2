@@ -9,6 +9,7 @@ export default function Feed({ embedded = false }) {
   const { profile } = useApp()
   const [posts, setPosts]           = useState([])
   const [loading, setLoading]       = useState(true)
+  const [initialLoad, setInitialLoad] = useState(true)
   const [content, setContent]       = useState('')
   const [photos, setPhotos]         = useState([])
   const [posting, setPosting]       = useState(false)
@@ -20,7 +21,6 @@ export default function Feed({ embedded = false }) {
   useEffect(() => { loadPosts() }, [filter])
 
   async function loadPosts() {
-    setLoading(true)
     let query = supabase.from('posts')
       .select('*, profiles(id, full_name, username, avatar_url), comment_count')
       .order('created_at', { ascending: false })
@@ -39,6 +39,7 @@ export default function Feed({ embedded = false }) {
     const { data: liked } = await supabase.from('post_likes').select('post_id').eq('user_id', profile.id)
     setLikedIds(new Set((liked || []).map(l => l.post_id)))
     setLoading(false)
+    setInitialLoad(false)
   }
 
   async function handlePhotoSelect(e) {

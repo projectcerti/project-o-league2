@@ -21,6 +21,7 @@ export default function ProfilePage() {
   const [followerCount, setFollowerCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
   const [loading, setLoading]           = useState(true)
+  const [initialLoad, setInitialLoad]   = useState(true)
   const [editing, setEditing]           = useState(false)
   const [editForm, setEditForm]         = useState({})
   const [saving, setSaving]             = useState(false)
@@ -379,7 +380,7 @@ export default function ProfilePage() {
     await supabase.auth.signOut()
   }
 
-  if (loading) return (
+  if (initialLoad && loading) return (
     <div className="max-w-2xl mx-auto space-y-3 pt-2 animate-pulse">
       <div className="h-36 bg-card rounded-3xl" />
       <div className="h-24 bg-card rounded-3xl" />

@@ -13,6 +13,7 @@ export default function AdminPanel() {
   const [submissions, setSubmissions] = useState([])
   const [feedback, setFeedback] = useState([]) // all feedback across all users
   const [loading, setLoading] = useState(true)
+  const [initialLoad, setInitialLoad] = useState(true)
   const [selectedUser, setSelectedUser] = useState(null)
   const [feedbackText, setFeedbackText] = useState('')
   const [savingFeedback, setSavingFeedback] = useState(false)
@@ -42,7 +43,6 @@ export default function AdminPanel() {
   useEffect(() => { loadData() }, [tab])
 
   async function loadData() {
-    setLoading(true)
     const [{ data: allUsers }, { data: allSubs }, { data: allSessions }, { data: allFeedback }] = await Promise.all([
       supabase.from('profiles').select('*').order('full_name'),
       supabase.from('weekly_submissions').select('*'),
@@ -54,6 +54,7 @@ export default function AdminPanel() {
     setSessions(allSessions || [])
     setFeedback(allFeedback || [])
     setLoading(false)
+    setInitialLoad(false)
   }
 
   async function grantAdmin() {
@@ -124,7 +125,7 @@ export default function AdminPanel() {
     none:      { label: '👋 Not started', bg: 'bg-soft border-border',          text: 'text-muted' },
   }
 
-  if (loading) return (
+  if (initialLoad && loading) return (
     <div className="max-w-3xl mx-auto space-y-3 pt-2 animate-pulse">
       {[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-card rounded-3xl" />)}
     </div>

@@ -82,7 +82,6 @@ export default function LogActivity() {
   useEffect(() => { load() }, [weekNum, profile.id])
 
   async function load() {
-    setLoading(true)
     const [{ data: sesh }, { data: nutLogs }, { data: sub }] = await Promise.all([
       supabase.from('sessions').select('*')
         .eq('user_id', profile.id).eq('week_number', weekNum)
@@ -106,6 +105,7 @@ export default function LogActivity() {
       setNutritionGoals({})
     }
     setLoading(false)
+    setInitialLoad(false)
   }
 
   function setField(field, val) { setForm(f => ({ ...f, [field]: val })); setError('') }
@@ -264,7 +264,7 @@ export default function LogActivity() {
 
   const selectedType = SESSION_TYPES.find(t => t.value === form.session_type)
 
-  if (loading) return (
+  if (initialLoad && loading) return (
     <div className="space-y-3 animate-pulse max-w-2xl mx-auto pt-2">
       {[...Array(3)].map((_, i) => <div key={i} className="h-20 bg-card rounded-3xl" />)}
     </div>
