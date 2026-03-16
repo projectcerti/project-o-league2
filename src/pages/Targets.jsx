@@ -8,16 +8,19 @@ export default function Targets() {
   const [submissions, setSubmissions] = useState([])
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [eligibility, setEligibility] = useState(null)
   const currentWeek = getCurrentWeek()
 
   useEffect(() => {
     async function load() {
-      const [{ data: subs }, { data: sess }] = await Promise.all([
+      const [{ data: subs }, { data: sess }, { data: elig }] = await Promise.all([
         supabase.from('weekly_submissions').select('*').eq('user_id', profile.id).order('week_number'),
         supabase.from('sessions').select('*').eq('user_id', profile.id).order('logged_at'),
+        supabase.from('prize_eligibility').select('*').eq('user_id', profile.id).maybeSingle(),
       ])
       setSubmissions(subs || [])
       setSessions(sess || [])
+      setEligibility(elig)
       setLoading(false)
     }
     load()
@@ -60,9 +63,68 @@ export default function Targets() {
     <div className="space-y-3 pt-1 fade-up">
 
       <div className="py-1">
-        <p className="text-muted text-xs font-dm">Season 1</p>
+        <p className="text-muted text-xs font-dm">Season 1 · Week {currentWeek}/{TOTAL_WEEKS}</p>
         <h1 className="font-kanit font-bold italic uppercase text-2xl text-white">TARGETS</h1>
       </div>
+
+      {/* Season grid */}
+      <div className="bg-card border border-border rounded-3xl p-4">
+        <p className="font-kanit font-semibold text-sm text-white mb-3">SEASON</p>
+        <div className="grid grid-cols-6 gap-1.5">
+          {Array.from({ length: TOTAL_WEEKS }, (_, i) => i + 1).map(w => {
+            const sub = submissions.find(s => s.week_number === w)
+            const pts = sub ? (sub.admin_override_points ?? sub.calculated_points ?? 0) : null
+            const isCurrent = w === currentWeek
+            const isFuture = w > currentWeek
+            return (
+              <div key={w} className={`rounded-2xl p-2.5 text-center border ${
+                isCurrent ? 'border-lime/40 bg-lime/8' :
+                isFuture ? 'border-border opacity-20' :
+                sub ? 'border-border bg-soft' : 'border-dashed border-border'
+              }`}>
+                <p className="text-xs text-muted font-dm">W{w}</p>
+                <p className={`font-kanit font-semibold text-lg leading-tight ${isCurrent ? 'text-lime' : pts !== null ? 'text-white' : 'text-border'}`}>
+                  {pts !== null ? pts : isFuture ? '' : '–'}
+                </p>
+                {sub && <div className={`w-1 h-1 rounded-full mx-auto mt-1 ${sub.status === 'approved' ? 'bg-lime' : sub.status === 'rejected' ? 'bg-red-400' : 'bg-yellow-400'}`} />}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Prize Eligibility */}
+      {eligibility && (
+        <div className={`rounded-3xl border px-4 py-3.5 ${
+          !eligibility.prize_eligible ? 'border-red-800/30 bg-red-900/8' :
+          eligibility.flawless_on_track ? 'border-lime/15 bg-lime/5' :
+          'border-border bg-card'
+        }`}>
+          <div className="flex items-center justify-between mb-3">
+            <p className="font-kanit font-semibold text-sm text-white">
+              {!eligibility.prize_eligible ? 'Out of prize draw' :
+               eligibility.flawless_on_track ? '💎 Flawless on track' : '🎯 Prize eligible'}
+            </p>
+            <span className={`text-xs font-dm px-2 py-1 rounded-full border ${
+              !eligibility.prize_eligible ? 'border-red-800 text-red-400' : 'border-lime/20 text-lime'
+            }`}>{!eligibility.prize_eligible ? 'OUT' : '✓ In'}</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: 'Missed', val: eligibility.weeks_missed, max: 1, bad: eligibility.weeks_missed >= 2, warn: eligibility.weeks_missed === 1 },
+              { label: 'Recovery', val: eligibility.recovery_weeks, max: 4, bad: false, warn: eligibility.recovery_weeks < 4 },
+              { label: 'Nutrition', val: eligibility.nutrition_weeks, max: 4, bad: false, warn: eligibility.nutrition_weeks < 4 },
+            ].map(({ label, val, max, bad, warn }) => (
+              <div key={label} className="bg-soft rounded-2xl p-2.5 text-center">
+                <p className="text-muted text-xs font-dm">{label}</p>
+                <p className={`font-kanit font-semibold text-xl leading-tight mt-0.5 ${bad ? 'text-red-400' : warn ? 'text-yellow-400' : 'text-lime'}`}>
+                  {val}<span className="text-muted text-xs font-dm">/{max}</span>
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Streaks */}
       <div className="bg-card border border-border rounded-3xl p-4">

@@ -5,15 +5,34 @@ import { useApp } from '../App'
 import { getCurrentWeek, TOTAL_WEEKS } from '../utils/points'
 import { Avatar } from './Feed'
 
-function RankedAvatar({ name, avatarUrl, rank, size = 'sm' }) {
-  const frames = {
-    1: 'ring-2 ring-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.5)]',
-    2: 'ring-2 ring-gray-300 shadow-[0_0_8px_rgba(209,213,219,0.4)]',
-    3: 'ring-2 ring-amber-600 shadow-[0_0_8px_rgba(180,83,9,0.3)]',
+function RankedAvatar({ name, avatarUrl, rank, size = 'sm', animated = false }) {
+  const [flames, setFlames] = useState(false)
+
+  function handleClick() {
+    if (rank !== 1) return
+    setFlames(true)
+    setTimeout(() => setFlames(false), 1500)
   }
+
   return (
-    <div className={`rounded-2xl ${frames[rank] || ''}`}>
+    <div className="relative cursor-pointer" onClick={handleClick}>
       <Avatar name={name} avatarUrl={avatarUrl} size={size} />
+      {rank === 1 && flames && (
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center animate-ping-once">
+          <div className="absolute inset-0 rounded-2xl overflow-hidden">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <span key={i} className="flame-particle" style={{
+                position: 'absolute',
+                left: `${10 + i * 10}%`,
+                bottom: 0,
+                fontSize: `${12 + Math.random() * 8}px`,
+                animation: `flameRise ${0.6 + Math.random() * 0.9}s ease-out forwards`,
+                animationDelay: `${i * 0.08}s`,
+              }}>🔥</span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -93,24 +112,23 @@ export default function Leaderboard() {
         ))}
       </div>
 
-      {/* Top 3 podium */}
+      {/* Top 3 podium — clean, no boxes */}
       {!loading && displayRows.length >= 3 && (
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2 py-2">
           {[displayRows[1], displayRows[0], displayRows[2]].map((row, i) => {
             const pos = [2, 1, 3][i]
-            const h = ['h-20', 'h-28', 'h-16'][i]
-            const golds = ['border-gray-500/30 bg-gray-500/5', 'border-yellow-400/40 bg-yellow-400/5', 'border-amber-600/30 bg-amber-600/5']
+            const heightClass = ['mt-4', 'mt-0', 'mt-8'][i]
             return (
               <Link key={row?.user_id} to={`/profile/${row?.username || row?.user_id}`}
-                className="flex flex-col items-center gap-1.5 group">
-                <div className={`w-full ${h} rounded-2xl border ${golds[i]} flex flex-col items-center justify-end pb-3 transition-all group-hover:scale-105`}>
-                  <RankedAvatar name={row?.full_name} avatarUrl={row?.avatar_url} rank={row?.rank} size="sm" />
-                  <span className="text-lg mt-1">{pos === 1 ? '🥇' : pos === 2 ? '🥈' : '🥉'}</span>
-                </div>
+                className={`flex flex-col items-center gap-1.5 group ${heightClass}`}>
+                <RankedAvatar name={row?.full_name} avatarUrl={row?.avatar_url} rank={pos} size={pos === 1 ? 'lg' : 'md'} />
+                <span className="text-xl">{pos === 1 ? '🥇' : pos === 2 ? '🥈' : '🥉'}</span>
                 <p className="text-xs font-dm font-medium text-center truncate w-full group-hover:text-lime transition-colors">
                   {row?.full_name?.split(' ')[0]}
                 </p>
-                <p className="font-kanit font-bold italic uppercase text-lg text-white">{row?.total_points}<span className="text-muted text-xs"> pts</span></p>
+                <p className={`font-kanit font-bold italic uppercase leading-tight text-white ${pos === 1 ? 'text-xl' : 'text-base'}`}>
+                  {row?.total_points}<span className="text-muted text-xs"> pts</span>
+                </p>
               </Link>
             )
           })}
