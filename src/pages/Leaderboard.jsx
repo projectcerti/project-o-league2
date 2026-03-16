@@ -71,19 +71,24 @@ export default function Leaderboard() {
   async function loadWeek(weekNum) {
     setLoading(true)
     setWeekRows([])
-    const { data, error } = await supabase
-      .from('weekly_submissions')
-      .select('user_id, calculated_points, admin_override_points, status, profiles(id, full_name, username, avatar_url)')
-      .eq('week_number', weekNum)
 
-    if (error) { console.error(error); setLoading(false); return }
+    const [{ data: subs }, { data: profiles }] = await Promise.all([
+      supabase.from('weekly_submissions')
+        .select('user_id, calculated_points, admin_override_points, status')
+        .eq('week_number', weekNum),
+      supabase.from('profiles').select('id, full_name, username, avatar_url'),
+    ])
 
-    const built = (data || [])
+    // Build a profile lookup map
+    const profileMap = {}
+    for (const p of profiles || []) profileMap[p.id] = p
+
+    const built = (subs || [])
       .map(d => ({
         user_id: d.user_id,
-        full_name: d.profiles?.full_name || 'Unknown',
-        username: d.profiles?.username,
-        avatar_url: d.profiles?.avatar_url,
+        full_name: profileMap[d.user_id]?.full_name || 'Unknown',
+        username: profileMap[d.user_id]?.username,
+        avatar_url: profileMap[d.user_id]?.avatar_url,
         total_points: d.admin_override_points ?? d.calculated_points ?? 0,
         status: d.status,
       }))
