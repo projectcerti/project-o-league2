@@ -5,9 +5,7 @@ import { useApp } from '../App'
 import { getCurrentWeek, TOTAL_WEEKS } from '../utils/points'
 import { Avatar } from './Feed'
 
-function RankedAvatar({ name, avatarUrl, rank, size = 'sm' }) {
-  return <Avatar name={name} avatarUrl={avatarUrl} size={size} />
-}
+
 
 export default function Leaderboard() {
   const { profile } = useApp()
@@ -16,29 +14,28 @@ export default function Leaderboard() {
   const [weekRows, setWeekRows] = useState([])
   const [lastRefreshed, setLastRefreshed] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [tabLoading, setTabLoading] = useState(false)
   const currentWeek = getCurrentWeek()
 
   useEffect(() => {
-    // Real-time: reload when weekly_submissions changes (live points)
-    const channel = supabase.channel('leaderboard-live')
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'weekly_submissions'
-      }, () => { if (tab === 'overall') loadOverall() })
-      .subscribe()
-    return () => supabase.removeChannel(channel)
-  }, [])
-
-  useEffect(() => {
     if (tab === 'overall') {
-      loadOverall()
+      loadOverall(rows.length === 0)
     } else {
       loadWeek(tab)
     }
   }, [tab])
 
-  async function loadOverall() {
-    setLoading(true)
+  useEffect(() => {
+    loadOverall(true)
+    const channel = supabase.channel('leaderboard-live')
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'weekly_submissions'
+      }, () => { if (tab === 'overall') loadOverall(false) })
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [])
+
+  async function loadOverall(showLoading = false) {
+    if (showLoading) setLoading(true)
     // Read directly from weekly_submissions — always live, no cache delay
     const [{ data: subs }, { data: profiles }] = await Promise.all([
       supabase.from('weekly_submissions').select('user_id, calculated_points, admin_override_points'),
@@ -70,9 +67,6 @@ export default function Leaderboard() {
   }
 
   async function loadWeek(weekNum) {
-    setWeekRows([])
-    setTabLoading(true)
-
     const [{ data: subs }, { data: profiles }] = await Promise.all([
       supabase.from('weekly_submissions')
         .select('user_id, calculated_points, admin_override_points, status')
@@ -96,7 +90,7 @@ export default function Leaderboard() {
       .map((r, i) => ({ ...r, rank: i + 1 }))
 
     setWeekRows(built)
-    setTabLoading(false)
+
   }
 
   const displayRows = tab === 'overall' ? rows : weekRows
@@ -145,7 +139,7 @@ export default function Leaderboard() {
             return (
               <Link key={row?.user_id} to={`/profile/${row?.username || row?.user_id}`}
                 className="flex flex-col items-center gap-1.5 group">
-                <RankedAvatar name={row?.full_name} avatarUrl={row?.avatar_url} rank={pos} size={pos === 1 ? 'lg' : 'md'} />
+                <Avatar name={row?.full_name} avatarUrl={row?.avatar_url} size={pos === 1 ? 'lg' : 'md'} />
                 <span className="text-xl">{pos === 1 ? '🥇' : pos === 2 ? '🥈' : '🥉'}</span>
                 <p className="text-xs font-dm font-medium text-center truncate w-full group-hover:text-lime transition-colors">
                   {row?.full_name?.split(' ')[0]}
@@ -161,7 +155,7 @@ export default function Leaderboard() {
 
       {/* Full list */}
       <div className="bg-card border border-border rounded-3xl overflow-hidden shadow-card">
-        {(loading || tabLoading) ? (
+        {loading ? (
           <div className="p-5 space-y-3">
             {[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-soft rounded-2xl animate-pulse" />)}
           </div>
@@ -178,7 +172,7 @@ export default function Leaderboard() {
                   <span className={`font-kanit font-bold italic uppercase text-lg w-6 text-center ${
                     idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-gray-400' : idx === 2 ? 'text-amber-600' : 'text-muted'
                   }`}>{idx + 1}</span>
-                  <RankedAvatar name={row.full_name} avatarUrl={row.avatar_url} rank={row.rank} size="sm" />
+                  <Avatar name={row.full_name} avatarUrl={row.avatar_url} size="sm" />
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-dm font-medium truncate ${isMe ? 'text-lime' : 'text-white'}`}>
                       {row.full_name}{isMe ? ' (you)' : ''}
