@@ -179,8 +179,8 @@ export default function LogActivity() {
     }
     // Update local state so subsequent syncs in same session know the row exists
     setWeekSub(existingSub || { ...payload })
-    // Refresh leaderboard cache immediately
-    await supabase.rpc('refresh_leaderboard_cache').catch(() => {})
+    // Refresh leaderboard cache in background — don't await, never block UI
+    supabase.rpc('refresh_leaderboard_cache').catch(() => {})
   }
 
   async function addSession() {
@@ -206,8 +206,9 @@ export default function LogActivity() {
       user_id: profile.id, content: postContent.slice(0, 500),
       session_id: newSession.id, photo_urls: photoUrl ? [photoUrl] : [],
     })
-    await syncWeeklySubmission()
-    setForm(emptyForm); removePhoto(); setShowForm(false); setSaving(false); load()
+    setForm(emptyForm); removePhoto(); setShowForm(false); setSaving(false)
+    await load()
+    syncWeeklySubmission()
   }
 
   async function addNutritionLog() {
@@ -244,21 +245,21 @@ export default function LogActivity() {
       photo_urls: uploadedUrls,
     })
 
-    await syncWeeklySubmission()
     setNutForm(emptyNutritionForm)
     setNutPhotos([])
     setShowNutritionForm(false)
     setSavingNut(false)
-    load()
+    await load()
+    syncWeeklySubmission()
   }
 
   async function deleteSession(id) {
     setDeletingId(id)
     await supabase.from('sessions').delete().eq('id', id)
     await supabase.from('posts').delete().eq('session_id', id).eq('user_id', profile.id)
-    await syncWeeklySubmission()
     setDeletingId(null)
-    load()
+    await load()
+    syncWeeklySubmission()
   }
 
   const selectedType = SESSION_TYPES.find(t => t.value === form.session_type)
