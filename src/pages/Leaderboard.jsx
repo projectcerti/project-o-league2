@@ -95,13 +95,12 @@ export default function Leaderboard() {
     setLoading(true)
     const { data } = await supabase
       .from('weekly_submissions')
-      .select('*, profiles(id, full_name, username, avatar_color, avatar_url)')
+      .select('*, profiles(id, full_name, username, avatar_url)')
       .eq('week_number', weekNum)
-      .in('status', ['approved', 'submitted'])
       .order('calculated_points', { ascending: false })
     setWeekRows((data || []).map((d, i) => ({
       user_id: d.user_id, full_name: d.profiles?.full_name,
-      username: d.profiles?.username, avatar_color: d.profiles?.avatar_color,
+      username: d.profiles?.username, avatar_url: d.profiles?.avatar_url,
       total_points: d.admin_override_points ?? d.calculated_points ?? 0,
       status: d.status, rank: i + 1,
     })))
