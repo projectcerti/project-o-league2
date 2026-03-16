@@ -17,6 +17,7 @@ export default function ProfilePage() {
   const [posts, setPosts]               = useState([])
   const [stats, setStats]               = useState(null)
   const [isFollowing, setIsFollowing]   = useState(false)
+  const [isNotifying, setIsNotifying]   = useState(false)
   const [followerCount, setFollowerCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
   const [loading, setLoading]           = useState(true)
@@ -76,6 +77,7 @@ export default function ProfilePage() {
         { data: followers },
         { data: following },
         { data: myFollow },
+        { data: myNotify },
       ] = await Promise.all([
         supabase.from('posts')
           .select('*, profiles(id, full_name, username, avatar_url)')
@@ -89,12 +91,17 @@ export default function ProfilePage() {
           .eq('follower_id', myProfile.id)
           .eq('following_id', found.id)
           .maybeSingle(),
+        supabase.from('friendships').select('notify')
+          .eq('follower_id', myProfile.id)
+          .eq('following_id', found.id)
+          .maybeSingle(),
       ])
 
       setPosts(userPosts || [])
       setFollowerCount(followers?.length || 0)
       setFollowingCount(following?.length || 0)
       setIsFollowing(!!myFollow)
+      setIsNotifying(myNotify?.notify || false)
 
       const subs = submissions || []
       setStats({
@@ -116,6 +123,16 @@ export default function ProfilePage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function toggleNotify() {
+    if (!isFollowing) return // must follow first
+    const newVal = !isNotifying
+    setIsNotifying(newVal)
+    await supabase.from('friendships')
+      .update({ notify: newVal })
+      .eq('follower_id', myProfile.id)
+      .eq('following_id', user.id)
   }
 
   async function toggleFollow() {
@@ -312,12 +329,23 @@ export default function ProfilePage() {
                   </button>
                 </div>
               ) : (
-                <button onClick={toggleFollow}
-                  className={`flex-shrink-0 text-sm font-kanit font-semibold uppercase px-4 py-2 rounded-2xl transition-all ${
-                    isFollowing ? 'border border-border text-muted hover:text-red-400' : 'bg-lime text-bg shadow-lime-sm'
-                  }`}>
-                  {isFollowing ? 'FOLLOWING' : 'FOLLOW'}
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button onClick={toggleFollow}
+                    className={`text-sm font-kanit font-semibold uppercase px-4 py-2 rounded-2xl transition-all ${
+                      isFollowing ? 'border border-border text-muted hover:text-red-400' : 'bg-lime text-bg shadow-lime-sm'
+                    }`}>
+                    {isFollowing ? 'FOLLOWING' : 'FOLLOW'}
+                  </button>
+                  {isFollowing && (
+                    <button onClick={toggleNotify} title={isNotifying ? 'Turn off notifications' : 'Get notified when they post'}
+                      className={`p-2 rounded-2xl border transition-all ${isNotifying ? 'border-lime/40 bg-lime/10 text-lime' : 'border-border text-muted hover:text-white'}`}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill={isNotifying ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                        <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                        <path d="M13.73 21a2 2 0 01-3.46 0"/>
+                      </svg>
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 

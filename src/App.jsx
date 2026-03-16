@@ -9,6 +9,7 @@ import LogActivity from './pages/LogActivity'
 import Leaderboard from './pages/Leaderboard'
 import MyStats from './pages/MyStats'
 import AdminPanel from './pages/AdminPanel'
+import Notifications from './pages/Notifications'
 import Feed from './pages/Feed'
 import Targets from './pages/Targets'
 import ProfilePage from './pages/ProfilePage'
@@ -70,10 +71,14 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/feed" element={<Feed />} />
+              <Route path="/social" element={<Feed />} />
+              <Route path="/notifications" element={<Notifications />} />
               <Route path="/log" element={<LogActivity />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/stats" element={<MyStats />} />
               <Route path="/feed" element={<Feed />} />
+              <Route path="/social" element={<Feed />} />
+              <Route path="/notifications" element={<Notifications />} />
               <Route path="/targets" element={<Targets />} />
               <Route path="/profile/:username" element={<ProfilePage />} />
               <Route path="/profile" element={<Navigate to={`/profile/${profile?.username || profile?.id}`} />} />

@@ -5,6 +5,19 @@ import { useApp } from '../App'
 import { getCurrentWeek, TOTAL_WEEKS } from '../utils/points'
 import { Avatar } from './Feed'
 
+function RankedAvatar({ name, avatarUrl, rank, size = 'sm' }) {
+  const frames = {
+    1: 'ring-2 ring-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.5)]',
+    2: 'ring-2 ring-gray-300 shadow-[0_0_8px_rgba(209,213,219,0.4)]',
+    3: 'ring-2 ring-amber-600 shadow-[0_0_8px_rgba(180,83,9,0.3)]',
+  }
+  return (
+    <div className={`rounded-2xl ${frames[rank] || ''}`}>
+      <Avatar name={name} avatarUrl={avatarUrl} size={size} />
+    </div>
+  )
+}
+
 export default function Leaderboard() {
   const { profile } = useApp()
   const [tab, setTab] = useState('overall')
@@ -91,7 +104,7 @@ export default function Leaderboard() {
               <Link key={row?.user_id} to={`/profile/${row?.username || row?.user_id}`}
                 className="flex flex-col items-center gap-1.5 group">
                 <div className={`w-full ${h} rounded-2xl border ${golds[i]} flex flex-col items-center justify-end pb-3 transition-all group-hover:scale-105`}>
-                  <Avatar name={row?.full_name} avatarUrl={row?.avatar_url} size="sm" />
+                  <RankedAvatar name={row?.full_name} avatarUrl={row?.avatar_url} rank={row?.rank} size="sm" />
                   <span className="text-lg mt-1">{pos === 1 ? '🥇' : pos === 2 ? '🥈' : '🥉'}</span>
                 </div>
                 <p className="text-xs font-dm font-medium text-center truncate w-full group-hover:text-lime transition-colors">
@@ -123,7 +136,7 @@ export default function Leaderboard() {
                   <span className={`font-kanit font-bold italic uppercase text-lg w-6 text-center ${
                     idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-gray-400' : idx === 2 ? 'text-amber-600' : 'text-muted'
                   }`}>{idx + 1}</span>
-                  <Avatar name={row.full_name} avatarUrl={row.avatar_url} size="sm" />
+                  <RankedAvatar name={row.full_name} avatarUrl={row.avatar_url} rank={row.rank} size="sm" />
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-dm font-medium truncate ${isMe ? 'text-lime' : 'text-white'}`}>
                       {row.full_name}{isMe ? ' (you)' : ''}
