@@ -4,10 +4,12 @@ import { supabase } from '../supabaseClient'
 import { useApp } from '../App'
 import { Avatar, getTimeAgo } from './Feed'
 
+const _cache = { notifications: null }
+
 export default function Notifications() {
   const { profile } = useApp()
-  const [notifications, setNotifications] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [notifications, setNotifications] = useState(_cache.notifications || [])
+  const [loading, setLoading] = useState(!_cache.notifications)
 
   useEffect(() => {
     load()
@@ -20,6 +22,7 @@ export default function Notifications() {
       .eq('user_id', profile.id)
       .order('created_at', { ascending: false })
       .limit(50)
+    _cache.notifications = data || []
     setNotifications(data || [])
     // Mark all as read
     await supabase.from('notifications').update({ read: true }).eq('user_id', profile.id).eq('read', false)

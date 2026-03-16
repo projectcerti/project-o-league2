@@ -7,35 +7,35 @@ import { Avatar } from './Feed'
 
 
 
+// Module-level cache — persists between navigations
+const _cache = { rows: [], weekRows: {}, lastRefreshed: null }
+
 export default function Leaderboard() {
   const { profile } = useApp()
   const [tab, setTab] = useState('overall')
-  const [rows, setRows] = useState([])
+  const [rows, setRows] = useState(_cache.rows)
   const [weekRows, setWeekRows] = useState([])
-  const [lastRefreshed, setLastRefreshed] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [lastRefreshed, setLastRefreshed] = useState(_cache.lastRefreshed)
+  const [loading, setLoading] = useState(_cache.rows.length === 0)
   const currentWeek = getCurrentWeek()
 
   useEffect(() => {
-    if (tab === 'overall') {
-      loadOverall(rows.length === 0)
-    } else {
-      loadWeek(tab)
-    }
+    if (tab === 'overall') loadOverall()
+    else loadWeek(tab)
   }, [tab])
 
   useEffect(() => {
-    loadOverall(true)
+    loadOverall()
     const channel = supabase.channel('leaderboard-live')
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'weekly_submissions'
-      }, () => { if (tab === 'overall') loadOverall(false) })
+      }, () => { if (tab === 'overall') loadOverall() })
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [])
 
-  async function loadOverall(showLoading = false) {
-    if (showLoading) setLoading(true)
+  async function loadOverall() {
+    if (_cache.rows.length === 0) setLoading(true)
     // Read directly from weekly_submissions — always live, no cache delay
     const [{ data: subs }, { data: profiles }] = await Promise.all([
       supabase.from('weekly_submissions').select('user_id, calculated_points, admin_override_points'),
@@ -61,12 +61,15 @@ export default function Leaderboard() {
       .sort((a, b) => b.total_points - a.total_points)
       .map((r, i) => ({ ...r, rank: i + 1 }))
 
+    _cache.rows = built
+    _cache.lastRefreshed = new Date().toISOString()
     setRows(built)
-    setLastRefreshed(new Date().toISOString())
+    setLastRefreshed(_cache.lastRefreshed)
     setLoading(false)
   }
 
   async function loadWeek(weekNum) {
+    if (_cache.weekRows[weekNum]) setWeekRows(_cache.weekRows[weekNum])
     const [{ data: subs }, { data: profiles }] = await Promise.all([
       supabase.from('weekly_submissions')
         .select('user_id, calculated_points, admin_override_points, status')
@@ -89,8 +92,8 @@ export default function Leaderboard() {
       .sort((a, b) => b.total_points - a.total_points)
       .map((r, i) => ({ ...r, rank: i + 1 }))
 
+    _cache.weekRows[weekNum] = built
     setWeekRows(built)
-
   }
 
   const displayRows = tab === 'overall' ? rows : weekRows

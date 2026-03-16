@@ -8,20 +8,22 @@ import LanePicker from '../components/LanePicker'
 import MyStats from './MyStats'
 import { TOTAL_WEEKS } from '../utils/points'
 
+const _profileCache = {}
+
 export default function ProfilePage() {
   const { username } = useParams()
   const { profile: myProfile, refetchProfile } = useApp()
   const navigate = useNavigate()
 
-  const [user, setUser]                 = useState(null)
-  const [posts, setPosts]               = useState([])
+  const cached = _profileCache[username]
+  const [user, setUser]                 = useState(cached?.user || null)
+  const [posts, setPosts]               = useState(cached?.posts || [])
   const [stats, setStats]               = useState(null)
   const [isFollowing, setIsFollowing]   = useState(false)
   const [isNotifying, setIsNotifying]   = useState(false)
   const [followerCount, setFollowerCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
-  const [loading, setLoading]           = useState(true)
-  const [initialLoad, setInitialLoad]   = useState(true)
+  const [loading, setLoading]           = useState(!cached)
   const [editing, setEditing]           = useState(false)
   const [editForm, setEditForm]         = useState({})
   const [saving, setSaving]             = useState(false)
@@ -380,7 +382,7 @@ export default function ProfilePage() {
     await supabase.auth.signOut()
   }
 
-  if (initialLoad && loading) return (
+  if (loading) return (
     <div className="max-w-2xl mx-auto space-y-3 pt-2 animate-pulse">
       <div className="h-36 bg-card rounded-3xl" />
       <div className="h-24 bg-card rounded-3xl" />

@@ -31,12 +31,14 @@ const RPE_LABELS = {
 const emptyForm = { session_type:'', activity_name:'', duration_minutes:'', rpe:null, notes:'' }
 const emptyNutritionForm = { meal_type:'', notes:'', tracking_link:'', goal_met: false }
 
+const _cache = {}
+
 export default function LogActivity() {
   const { profile } = useApp()
   const currentWeek = getCurrentWeek()
   const [weekNum, setWeekNum]           = useState(currentWeek)
-  const [sessions, setSessions]         = useState([])
-  const [nutritionLogs, setNutritionLogs] = useState([])
+  const [sessions, setSessions]         = useState(_cache.sessions || [])
+  const [nutritionLogs, setNutritionLogs] = useState(_cache.nutritionLogs || [])
   const [weekSub, setWeekSub]           = useState(null)
   const [loading, setLoading]           = useState(true)
   const [activeTab, setActiveTab]       = useState('activity') // 'activity' | 'nutrition'
@@ -94,6 +96,8 @@ export default function LogActivity() {
       supabase.from('weekly_submissions').select('*')
         .eq('user_id', profile.id).eq('week_number', weekNum).maybeSingle(),
     ])
+    _cache.sessions = sesh || []
+    _cache.nutritionLogs = nutLogs || []
     setSessions(sesh || [])
     setNutritionLogs(nutLogs || [])
     setWeekSub(sub)
@@ -105,7 +109,6 @@ export default function LogActivity() {
       setNutritionGoals({})
     }
     setLoading(false)
-    setInitialLoad(false)
   }
 
   function setField(field, val) { setForm(f => ({ ...f, [field]: val })); setError('') }
@@ -264,7 +267,7 @@ export default function LogActivity() {
 
   const selectedType = SESSION_TYPES.find(t => t.value === form.session_type)
 
-  if (initialLoad && loading) return (
+  if (loading) return (
     <div className="space-y-3 animate-pulse max-w-2xl mx-auto pt-2">
       {[...Array(3)].map((_, i) => <div key={i} className="h-20 bg-card rounded-3xl" />)}
     </div>

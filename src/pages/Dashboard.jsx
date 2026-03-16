@@ -6,11 +6,13 @@ import { getCurrentWeek, getWeekDeadline, getWeekLabel, TOTAL_WEEKS } from '../u
 import { Avatar } from './Feed'
 import Feed from './Feed'
 
+const _cache = { submissions: null, topThree: null }
+
 export default function Dashboard() {
   const { profile } = useApp()
-  const [submissions, setSubmissions] = useState([])
-  const [topThree, setTopThree] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [submissions, setSubmissions] = useState(_cache.submissions || [])
+  const [topThree, setTopThree] = useState(_cache.topThree || [])
+  const [loading, setLoading] = useState(!_cache.submissions)
 
   const currentWeek = getCurrentWeek()
   const deadline = getWeekDeadline(currentWeek)
@@ -39,6 +41,8 @@ export default function Dashboard() {
         .sort((a, b) => b.total_points - a.total_points)
         .slice(0, 3)
 
+      _cache.submissions = mySubs || []
+      _cache.topThree = top3
       setSubmissions(mySubs || [])
       setTopThree(top3)
       setLoading(false)

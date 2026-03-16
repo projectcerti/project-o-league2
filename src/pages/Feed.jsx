@@ -5,11 +5,12 @@ import { useApp } from '../App'
 
 const MAX_CHARS = 500
 
+const _feedCache = { posts: [], likedIds: [] }
+
 export default function Feed({ embedded = false }) {
   const { profile } = useApp()
-  const [posts, setPosts]           = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [initialLoad, setInitialLoad] = useState(true)
+  const [posts, setPosts]           = useState(_feedCache.posts)
+  const [loading, setLoading]       = useState(_feedCache.posts.length === 0)
   const [content, setContent]       = useState('')
   const [photos, setPhotos]         = useState([])
   const [posting, setPosting]       = useState(false)
@@ -37,9 +38,11 @@ export default function Feed({ embedded = false }) {
     setPosts(data || [])
 
     const { data: liked } = await supabase.from('post_likes').select('post_id').eq('user_id', profile.id)
-    setLikedIds(new Set((liked || []).map(l => l.post_id)))
+    const likedSet = new Set((liked || []).map(l => l.post_id))
+    _feedCache.posts = data || []
+    _feedCache.likedIds = [...likedSet]
+    setLikedIds(likedSet)
     setLoading(false)
-    setInitialLoad(false)
   }
 
   async function handlePhotoSelect(e) {

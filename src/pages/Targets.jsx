@@ -3,12 +3,14 @@ import { supabase } from '../supabaseClient'
 import { useApp } from '../App'
 import { TOTAL_WEEKS, getCurrentWeek } from '../utils/points'
 
+const _cache = { submissions: null, sessions: null, eligibility: null }
+
 export default function Targets() {
   const { profile } = useApp()
-  const [submissions, setSubmissions] = useState([])
-  const [sessions, setSessions] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [eligibility, setEligibility] = useState(null)
+  const [submissions, setSubmissions] = useState(_cache.submissions || [])
+  const [sessions, setSessions] = useState(_cache.sessions || [])
+  const [loading, setLoading] = useState(!_cache.submissions)
+  const [eligibility, setEligibility] = useState(_cache.eligibility)
   const currentWeek = getCurrentWeek()
 
   useEffect(() => {
@@ -18,6 +20,9 @@ export default function Targets() {
         supabase.from('sessions').select('*').eq('user_id', profile.id).order('logged_at'),
         supabase.from('prize_eligibility').select('*').eq('user_id', profile.id).maybeSingle(),
       ])
+      _cache.submissions = subs || []
+      _cache.sessions = sess || []
+      _cache.eligibility = elig
       setSubmissions(subs || [])
       setSessions(sess || [])
       setEligibility(elig)
