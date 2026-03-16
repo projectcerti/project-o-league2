@@ -23,6 +23,10 @@ export default function AdminPanel() {
   const currentWeek = getCurrentWeek()
 
   const [isOwner, setIsOwner] = useState(false)
+  const [overrideModal, setOverrideModal] = useState(null) // { userId, userName, weekNum, currentPts }
+  const [overridePts, setOverridePts] = useState('')
+  const [overrideReason, setOverrideReason] = useState('')
+  const [savingOverride, setSavingOverride] = useState(false)
 
   useEffect(() => {
     async function checkRole() {
@@ -210,10 +214,19 @@ export default function AdminPanel() {
                   <p className="text-xs text-red-400 font-dm mb-2">⚠️ Missed {m.missedWeeks} week{m.missedWeeks !== 1 ? 's' : ''}</p>
                 )}
 
-                <button onClick={() => { setSelectedUser(u); setTab('feedback') }}
-                  className="text-xs text-lime font-dm hover:underline">
-                  {userFeedbackCount > 0 ? `💬 ${userFeedbackCount} feedback note${userFeedbackCount !== 1 ? 's' : ''} · Send more →` : '💬 Send feedback →'}
-                </button>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => { setSelectedUser(u); setTab('feedback') }}
+                    className="text-xs text-lime font-dm hover:underline">
+                    {userFeedbackCount > 0 ? `💬 ${userFeedbackCount} feedback note${userFeedbackCount !== 1 ? 's' : ''} · Send more →` : '💬 Send feedback →'}
+                  </button>
+                  <button onClick={() => {
+                    setOverrideModal({ userId: u.id, userName: u.full_name, weekNum: currentWeek, currentPts: m.currentWeekPts ?? 0 })
+                    setOverridePts(String(m.currentWeekPts ?? 0))
+                  }}
+                    className="text-xs text-yellow-400 font-dm hover:underline">
+                    ✏️ Override points →
+                  </button>
+                </div>
               </div>
             )
           })}
@@ -387,6 +400,59 @@ export default function AdminPanel() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* Point Override Modal */}
+      {overrideModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setOverrideModal(null)}>
+          <div className="bg-card border border-border rounded-3xl p-5 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <p className="font-kanit font-bold italic uppercase text-white">Override Points</p>
+              <button onClick={() => setOverrideModal(null)} className="text-muted hover:text-white text-xl">×</button>
+            </div>
+            <p className="text-sm text-muted font-dm">
+              Setting points for <span className="text-white font-semibold">{overrideModal.userName}</span> — Week {overrideModal.weekNum}
+            </p>
+
+            <div>
+              <p className="text-xs font-dm text-muted uppercase tracking-widest mb-2">NEW POINTS (0–11)</p>
+              <div className="flex gap-1.5 flex-wrap mb-2">
+                {Array.from({ length: 12 }, (_, i) => i).map(n => (
+                  <button key={n} onClick={() => setOverridePts(String(n))}
+                    className={`w-9 h-9 rounded-xl text-sm font-kanit font-semibold transition-all ${
+                      parseInt(overridePts) === n ? 'bg-lime text-bg' : 'bg-soft border border-border text-muted hover:text-white'
+                    }`}>{n}</button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted font-dm">Or type:</span>
+                <input type="number" min="0" max="11" value={overridePts}
+                  onChange={e => setOverridePts(e.target.value)}
+                  className="w-20 bg-soft border border-border rounded-xl px-3 py-1.5 text-sm text-white focus:outline-none focus:border-lime/40 font-dm" />
+                <span className="text-muted font-dm text-sm">/11</span>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-dm text-muted uppercase tracking-widest mb-2">REASON (OPTIONAL)</p>
+              <textarea value={overrideReason} onChange={e => setOverrideReason(e.target.value)}
+                placeholder="e.g. Deducted for missed deadline, bonus for extra effort…"
+                rows={2}
+                className="w-full bg-soft border border-border rounded-2xl px-3 py-2 text-sm text-white placeholder-muted focus:outline-none focus:border-lime/40 resize-none font-dm" />
+              <p className="text-xs text-muted font-dm mt-1">The user will be notified with this reason.</p>
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={() => setOverrideModal(null)}
+                className="flex-1 border border-border text-muted font-kanit font-semibold uppercase py-2.5 rounded-2xl hover:text-white transition-all text-sm">
+                Cancel
+              </button>
+              <button onClick={savePointOverride} disabled={savingOverride || overridePts === ''}
+                className="flex-1 bg-lime text-bg font-kanit font-bold uppercase py-2.5 rounded-2xl disabled:opacity-40 shadow-lime-sm text-sm">
+                {savingOverride ? 'Saving…' : 'Set Points'}
+              </button>
+            </div>
           </div>
         </div>
       )}

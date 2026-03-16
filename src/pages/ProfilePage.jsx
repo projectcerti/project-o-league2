@@ -34,6 +34,15 @@ export default function ProfilePage() {
   const [granting, setGranting] = useState(false)
   const [grantMsg, setGrantMsg] = useState('')
   const [isOwner, setIsOwner] = useState(false)
+  const [nutritionGoals, setNutritionGoals] = useState({})
+  const [goalsPublic, setGoalsPublic] = useState(false)
+  const [savingGoals, setSavingGoals] = useState(false)
+  const [showGoalsEditor, setShowGoalsEditor] = useState(false)
+  const [goalsForm, setGoalsForm] = useState({
+    protein: '', calories: '', water: '', fibre: '',
+    carbs: '', fat: '', custom1_name: '', custom1_value: '',
+    custom2_name: '', custom2_value: '',
+  })
 
   const isMe = user?.id === myProfile?.id
 
@@ -102,6 +111,26 @@ export default function ProfilePage() {
       setFollowingCount(following?.length || 0)
       setIsFollowing(!!myFollow)
       setIsNotifying(myNotify?.notify || false)
+
+      // Load nutrition goals for own profile
+      if (found.id === myProfile.id) {
+        const goals = found.nutrition_goals || {}
+        setNutritionGoals(goals)
+        setGoalsPublic(found.nutrition_goals_public || false)
+        setGoalsForm(f => ({
+          ...f,
+          protein: goals.protein || '',
+          calories: goals.calories || '',
+          water: goals.water || '',
+          fibre: goals.fibre || '',
+          carbs: goals.carbs || '',
+          fat: goals.fat || '',
+          custom1_name: goals.custom1_name || '',
+          custom1_value: goals.custom1_value || '',
+          custom2_name: goals.custom2_name || '',
+          custom2_value: goals.custom2_value || '',
+        }))
+      }
 
       const subs = submissions || []
       setStats({
@@ -205,6 +234,30 @@ export default function ProfilePage() {
     await refetchProfile()
     setEditing(false)
     setSaving(false)
+  }
+
+  async function saveGoals() {
+    setSavingGoals(true)
+    const goals = {}
+    if (goalsForm.protein) goals.protein = goalsForm.protein
+    if (goalsForm.calories) goals.calories = goalsForm.calories
+    if (goalsForm.water) goals.water = goalsForm.water
+    if (goalsForm.fibre) goals.fibre = goalsForm.fibre
+    if (goalsForm.carbs) goals.carbs = goalsForm.carbs
+    if (goalsForm.fat) goals.fat = goalsForm.fat
+    if (goalsForm.custom1_name && goalsForm.custom1_value) {
+      goals[goalsForm.custom1_name.toLowerCase().replace(/\s+/g, '_')] = goalsForm.custom1_value
+    }
+    if (goalsForm.custom2_name && goalsForm.custom2_value) {
+      goals[goalsForm.custom2_name.toLowerCase().replace(/\s+/g, '_')] = goalsForm.custom2_value
+    }
+    await supabase.from('profiles').update({
+      nutrition_goals: goals,
+      nutrition_goals_public: goalsPublic,
+    }).eq('id', myProfile.id)
+    setNutritionGoals(goals)
+    setShowGoalsEditor(false)
+    setSavingGoals(false)
   }
 
   async function grantAdmin() {

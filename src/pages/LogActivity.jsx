@@ -29,7 +29,7 @@ const RPE_LABELS = {
 }
 
 const emptyForm = { session_type:'', activity_name:'', duration_minutes:'', rpe:null, notes:'' }
-const emptyNutritionForm = { meal_type:'', notes:'', tracking_link:'' }
+const emptyNutritionForm = { meal_type:'', notes:'', tracking_link:'', goal_met: false }
 
 export default function LogActivity() {
   const { profile } = useApp()
@@ -52,6 +52,7 @@ export default function LogActivity() {
   const [error, setError]               = useState('')
   const [nutError, setNutError]         = useState('')
   const [deletingId, setDeletingId]     = useState(null)
+  const [nutritionGoals, setNutritionGoals] = useState({})
   const fileRef    = useRef()
   const nutFileRef = useRef()
 
@@ -60,7 +61,13 @@ export default function LogActivity() {
   const isLocked       = isPastDeadline || weekSub?.status === 'approved'
 
   // Calculate nutrition_days from distinct calendar days with nutrition logs
+  const hasGoals = Object.keys(nutritionGoals).length > 0
   const nutritionDays = (() => {
+    const qualifying = nutritionLogs.filter(l => hasGoals ? l.goal_met : true)
+    const days = new Set(qualifying.map(l => new Date(l.logged_at).toDateString()))
+    return days.size
+  })()
+  const totalLoggedDays = (() => {
     const days = new Set(nutritionLogs.map(l => new Date(l.logged_at).toDateString()))
     return days.size
   })()
@@ -91,6 +98,9 @@ export default function LogActivity() {
     setSessions(sesh || [])
     setNutritionLogs(nutLogs || [])
     setWeekSub(sub)
+    // Load user's nutrition goals
+    const { data: prof } = await supabase.from('profiles').select('nutrition_goals').eq('id', profile.id).single()
+    setNutritionGoals(prof?.nutrition_goals || {})
     setLoading(false)
   }
 
@@ -145,7 +155,10 @@ export default function LogActivity() {
     const soc = s.filter(x => x.session_type === 'social').length
     // Calc nutrition days from distinct days
     const nutSessions = s.filter(x => x.session_type === 'nutrition')
-    const nd = nutrDays !== undefined ? nutrDays : new Set(nutSessions.map(x => new Date(x.logged_at).toDateString())).size
+    // Only count days where goal was met (or if no goals set, count all logged days)
+    const hasGoals = Object.keys(nutritionGoals || {}).length > 0
+    const goalMetSessions = nutSessions.filter(x => hasGoals ? x.goal_met : true)
+    const nd = nutrDays !== undefined ? nutrDays : new Set(goalMetSessions.map(x => new Date(x.logged_at).toDateString())).size
     const calc = calculatePoints({ workouts: w, recovery_sessions: r, social_sessions: soc, nutrition_days: nd })
     const payload = {
       user_id: profile.id, week_number: weekNum,
@@ -210,6 +223,7 @@ export default function LogActivity() {
       notes: nutForm.notes || null,
       tracking_link: nutForm.tracking_link || null,
       photo_urls: uploadedUrls.length > 0 ? uploadedUrls : null,
+      goal_met: nutForm.goal_met,
     })
     if (nutErr) { setNutError(nutErr.message); setSavingNut(false); return }
 
@@ -571,6 +585,46 @@ export default function LogActivity() {
                   placeholder="What did you eat? Any wins today?…" rows={2}
                   className="w-full bg-soft border border-border rounded-2xl px-4 py-2.5 text-sm text-white placeholder-muted focus:outline-none focus:border-lime/40 resize-none font-dm" />
               </div>
+
+              {/* Goal checkbox */}
+              {hasGoals && (
+                <div className={`rounded-2xl border p-4 transition-all ${nutForm.goal_met ? 'border-lime/40 bg-lime/5' : 'border-border'}`}>
+                  <p className="text-xs font-dm text-muted uppercase tracking-widest mb-3">YOUR DAILY GOALS</p>
+                  <div className="space-y-2 mb-3">
+                    {Object.entries(nutritionGoals).filter(([k, v]) => v).map(([key, value]) => (
+                      <div key={key} className="flex items-center gap-2">
+                        <span className="text-xs text-white font-dm capitalize">{key.replace(/_/g, ' ')}:</span>
+                        <span className="text-xs text-lime font-kanit font-semibold">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={() => setNutField('goal_met', !nutForm.goal_met)}
+                    className={`w-full flex items-center gap-3 p-3 rounded-2xl border transition-all ${
+                      nutForm.goal_met ? 'border-lime/40 bg-lime/10' : 'border-border hover:border-lime/20'
+                    }`}>
+                    <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                      nutForm.goal_met ? 'bg-lime border-lime' : 'border-border'
+                    }`}>
+                      {nutForm.goal_met && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                    </div>
+                    <div className="text-left">
+                      <p className={`text-sm font-kanit font-semibold uppercase ${nutForm.goal_met ? 'text-lime' : 'text-white'}`}>
+                        {nutForm.goal_met ? 'Goal Reached!' : 'Did you reach your goal today?'}
+                      </p>
+                      <p className="text-xs text-muted font-dm">Tick this to earn nutrition points</p>
+                    </div>
+                  </button>
+                  {!nutForm.goal_met && (
+                    <p className="text-xs text-yellow-400 font-dm mt-2">You need to reach your goal to earn points for this log.</p>
+                  )}
+                </div>
+              )}
+
+              {!hasGoals && (
+                <div className="bg-soft border border-border rounded-2xl p-3">
+                  <p className="text-xs text-muted font-dm">Set your nutrition goals in the <span className="text-lime">Me</span> tab to track goal completion and earn points.</p>
+                </div>
+              )}
 
               <button onClick={addNutritionLog} disabled={savingNut}
                 className="w-full bg-lime text-bg font-kanit font-bold uppercase text-lg py-4 rounded-2xl shadow-lime-glow disabled:opacity-50 active:scale-95 transition-all">

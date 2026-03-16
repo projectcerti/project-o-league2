@@ -38,7 +38,7 @@ export function calculatePoints({ workouts, recovery_sessions, social_sessions, 
   // Social (max 1)
   if (social_sessions >= 1) pts += 1
 
-  // Nutrition (max 2)
+  // Nutrition (max 2) — counts days where goal was met
   if (nutrition_days >= 6) pts += 2
   else if (nutrition_days >= 5) pts += 1
 
