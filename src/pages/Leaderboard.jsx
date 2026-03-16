@@ -47,17 +47,22 @@ export default function Leaderboard() {
   const currentWeek = getCurrentWeek()
 
   useEffect(() => {
-    loadOverall()
     // Real-time: reload when weekly_submissions changes (live points)
     const channel = supabase.channel('leaderboard-live')
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'weekly_submissions'
-      }, () => loadOverall())
+      }, () => { if (tab === 'overall') loadOverall() })
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [])
 
-  useEffect(() => { if (tab !== 'overall') loadWeek(tab) }, [tab])
+  useEffect(() => {
+    if (tab === 'overall') {
+      loadOverall()
+    } else {
+      loadWeek(tab)
+    }
+  }, [tab])
 
   async function loadOverall() {
     setLoading(true)
@@ -93,17 +98,27 @@ export default function Leaderboard() {
 
   async function loadWeek(weekNum) {
     setLoading(true)
-    const { data } = await supabase
+    setWeekRows([])
+    const { data, error } = await supabase
       .from('weekly_submissions')
-      .select('*, profiles(id, full_name, username, avatar_url)')
+      .select('user_id, calculated_points, admin_override_points, status, profiles(id, full_name, username, avatar_url)')
       .eq('week_number', weekNum)
-      .order('calculated_points', { ascending: false })
-    setWeekRows((data || []).map((d, i) => ({
-      user_id: d.user_id, full_name: d.profiles?.full_name,
-      username: d.profiles?.username, avatar_url: d.profiles?.avatar_url,
-      total_points: d.admin_override_points ?? d.calculated_points ?? 0,
-      status: d.status, rank: i + 1,
-    })))
+
+    if (error) { console.error(error); setLoading(false); return }
+
+    const built = (data || [])
+      .map(d => ({
+        user_id: d.user_id,
+        full_name: d.profiles?.full_name || 'Unknown',
+        username: d.profiles?.username,
+        avatar_url: d.profiles?.avatar_url,
+        total_points: d.admin_override_points ?? d.calculated_points ?? 0,
+        status: d.status,
+      }))
+      .sort((a, b) => b.total_points - a.total_points)
+      .map((r, i) => ({ ...r, rank: i + 1 }))
+
+    setWeekRows(built)
     setLoading(false)
   }
 
