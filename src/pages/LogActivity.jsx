@@ -483,32 +483,26 @@ export default function LogActivity() {
       {/* ─── NUTRITION TAB ─── */}
       {activeTab === 'nutrition' && (
         <>
-          {/* Nutrition info card */}
-          <div className="bg-card border border-border rounded-3xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="font-kanit font-semibold uppercase text-sm text-white">🥗 NUTRITION THIS WEEK</p>
-              <span className={`text-sm font-kanit font-bold ${bd.nutrition_pts > 0 ? 'text-lime' : 'text-muted'}`}>
-                {nutritionDays} day{nutritionDays !== 1 ? 's' : ''}
-              </span>
+          {/* Progress strip — compact, same style as activity header area */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-kanit font-semibold uppercase text-sm text-white">NUTRITION THIS WEEK</p>
+              <div className="flex gap-1 mt-1.5">
+                {Array.from({ length: 7 }, (_, i) => i + 1).map(d => (
+                  <div key={d} className={`w-6 h-2 rounded-full transition-all ${d <= nutritionDays ? 'bg-lime' : 'bg-soft'}`} />
+                ))}
+              </div>
+              <p className={`text-xs font-dm mt-1 ${bd.nutrition_pts >= 2 ? 'text-lime' : bd.nutrition_pts >= 1 ? 'text-green-400' : 'text-muted'}`}>
+                {nutritionDays >= 6 ? '2 pts — great week!' : nutritionDays >= 5 ? '1 pt — log 1 more for 2pts' : `Log ${Math.max(0,5 - nutritionDays)} more day${5 - nutritionDays !== 1 ? 's' : ''} to earn points`}
+              </p>
             </div>
-            <div className="flex gap-1 mb-2">
-              {Array.from({ length: 7 }, (_, i) => i + 1).map(d => (
-                <div key={d} className={`flex-1 h-2 rounded-full transition-all ${d <= nutritionDays ? 'bg-lime' : 'bg-soft'}`} />
-              ))}
-            </div>
-            <p className={`text-xs font-dm ${bd.nutrition_pts >= 2 ? 'text-lime' : bd.nutrition_pts >= 1 ? 'text-green-400' : 'text-muted'}`}>
-              {nutritionDays >= 6 ? '🔥 2 pts — great week!' : nutritionDays >= 5 ? '✓ 1 pt — log 1 more for 2pts' : `Log ${5 - nutritionDays} more day${5 - nutritionDays !== 1 ? 's' : ''} to earn points`}
-            </p>
-            <p className="text-xs text-muted font-dm mt-1">Multiple logs on the same day count as 1 day · 5 days = 1pt · 6–7 days = 2pts</p>
+            {!isLocked && !showNutritionForm && (
+              <button onClick={() => setShowNutritionForm(true)}
+                className="bg-lime text-bg font-kanit font-semibold uppercase text-xs px-4 py-2 rounded-2xl shadow-lime-sm active:scale-95 transition-all flex-shrink-0">
+                + ADD
+              </button>
+            )}
           </div>
-
-          {/* Add nutrition button */}
-          {!isLocked && !showNutritionForm && (
-            <button onClick={() => setShowNutritionForm(true)}
-              className="w-full bg-lime text-bg font-kanit font-bold uppercase text-base py-3.5 rounded-2xl shadow-lime-sm active:scale-95 transition-all">
-              + LOG NUTRITION
-            </button>
-          )}
 
           {/* Nutrition form */}
           {showNutritionForm && !isLocked && (
@@ -583,6 +577,13 @@ export default function LogActivity() {
                 {savingNut ? 'SAVING…' : 'LOG NUTRITION'}
               </button>
               <p className="text-xs text-muted font-dm text-center">This will also post to your feed automatically</p>
+            </div>
+          )}
+
+          {nutritionLogs.length === 0 && !showNutritionForm && (
+            <div className="border border-dashed border-border rounded-3xl p-8 text-center">
+              <p className="text-muted font-dm text-sm">No nutrition logged yet.</p>
+              {!isLocked && <button onClick={() => setShowNutritionForm(true)} className="mt-2 text-lime text-sm font-dm hover:underline">Log your first meal</button>}
             </div>
           )}
 
