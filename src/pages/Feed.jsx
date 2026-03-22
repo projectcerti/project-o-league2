@@ -259,6 +259,12 @@ function PostCard({ post, profile, likedIds, onLike, onComment }) {
     onComment()
   }
 
+  async function deleteComment(commentId) {
+    await supabase.from('post_comments').delete().eq('id', commentId).eq('user_id', profile.id)
+    await loadComments()
+    onComment()
+  }
+
   // Show first 3 comments by default, all if expanded
   const visibleComments = showAllComments ? comments : comments.slice(0, 3)
   const hiddenCount = comments.length - 3
@@ -338,12 +344,18 @@ function PostCard({ post, profile, likedIds, onLike, onComment }) {
           ) : (
             <>
               {visibleComments.map(c => (
-                <div key={c.id} className="flex gap-2">
+                <div key={c.id} className="flex gap-2 group">
                   <Avatar name={c.profiles?.full_name} avatarUrl={c.profiles?.avatar_url} size="sm" />
                   <div className="flex-1 bg-soft rounded-2xl px-3 py-2">
-                    <div className="flex items-baseline gap-2">
-                      <p className="text-xs font-kanit font-semibold text-white">{c.profiles?.full_name}</p>
-                      <p className="text-xs text-muted font-dm">{getTimeAgo(c.created_at)}</p>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-xs font-kanit font-semibold text-white">{c.profiles?.full_name}</p>
+                        <p className="text-xs text-muted font-dm">{getTimeAgo(c.created_at)}</p>
+                      </div>
+                      {c.user_id === profile.id && (
+                        <button onClick={() => deleteComment(c.id)}
+                          className="text-muted hover:text-red-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity">×</button>
+                      )}
                     </div>
                     <p className="text-xs text-gray-300 font-dm mt-0.5">{c.content}</p>
                   </div>
