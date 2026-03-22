@@ -515,7 +515,7 @@ export default function LogActivity() {
                     <p className="text-xs font-dm">TAP TO ADD PHOTO PROOF</p>
                   </button>
                 )}
-                <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoSelect} />
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />
               </div>
 
               <div>

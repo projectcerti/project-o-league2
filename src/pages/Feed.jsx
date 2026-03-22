@@ -22,10 +22,12 @@ export default function Feed({ embedded = false }) {
   useEffect(() => { loadPosts() }, [filter])
 
   async function loadPosts() {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     let query = supabase.from('posts')
       .select('*, profiles(id, full_name, username, avatar_url), comment_count')
+      .gte('created_at', since)
       .order('created_at', { ascending: false })
-      .limit(embedded ? 10 : 50)
+      .limit(embedded ? 10 : 100)
 
     if (filter === 'following') {
       const { data: follows } = await supabase.from('friendships').select('following_id').eq('follower_id', profile.id)
