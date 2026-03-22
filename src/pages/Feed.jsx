@@ -15,7 +15,7 @@ export default function Feed({ embedded = false }) {
   const [photos, setPhotos]         = useState([])
   const [posting, setPosting]       = useState(false)
   const [filter, setFilter]         = useState('everyone')
-  const [likedIds, setLikedIds]     = useState(new Set())
+  const [likedIds, setLikedIds]     = useState(new Set(_feedCache.likedIds))
   const textareaRef = useRef()
   const fileRef     = useRef()
 
@@ -158,18 +158,31 @@ export default function Feed({ embedded = false }) {
       ) : (
         posts.map(post => (
           <PostCard key={post.id} post={post} profile={profile} likedIds={likedIds}
-            onLike={() => {
+            onLike={async () => {
               const liked = likedIds.has(post.id)
               if (liked) {
-                supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', profile.id)
+                // Optimistic UI update
                 setLikedIds(prev => { const s = new Set(prev); s.delete(post.id); return s })
                 setPosts(prev => prev.map(p => p.id === post.id ? { ...p, likes_count: (p.likes_count || 1) - 1 } : p))
+                const { error } = await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', profile.id)
+                if (error) {
+                  console.error('Unlike failed:', error)
+                  // Revert on failure
+                  setLikedIds(prev => new Set([...prev, post.id]))
+                  setPosts(prev => prev.map(p => p.id === post.id ? { ...p, likes_count: (p.likes_count || 0) + 1 } : p))
+                }
               } else {
-                supabase.from('post_likes').insert({ post_id: post.id, user_id: profile.id })
+                // Optimistic UI update
                 setLikedIds(prev => new Set([...prev, post.id]))
                 setPosts(prev => prev.map(p => p.id === post.id ? { ...p, likes_count: (p.likes_count || 0) + 1 } : p))
-                // Notify post owner
-                if (post.user_id !== profile.id) {
+                const { error } = await supabase.from('post_likes').insert({ post_id: post.id, user_id: profile.id })
+                if (error) {
+                  console.error('Like failed:', error)
+                  // Revert on failure
+                  setLikedIds(prev => { const s = new Set(prev); s.delete(post.id); return s })
+                  setPosts(prev => prev.map(p => p.id === post.id ? { ...p, likes_count: (p.likes_count || 1) - 1 } : p))
+                } else if (post.user_id !== profile.id) {
+                  // Notify post owner (fire and forget is fine for notifications)
                   supabase.from('notifications').insert({
                     user_id: post.user_id, actor_id: profile.id,
                     type: 'like', post_id: post.id,
@@ -216,12 +229,17 @@ function PostCard({ post, profile, likedIds, onLike, onComment }) {
   async function submitComment() {
     if (!commentText.trim()) return
     setPosting(true)
-    await supabase.from('post_comments').insert({
+    const { error } = await supabase.from('post_comments').insert({
       post_id: post.id, user_id: profile.id, content: commentText.trim().slice(0, 300)
     })
+    if (error) {
+      console.error('Comment failed:', error)
+      setPosting(false)
+      return
+    }
     // Notify post owner
     if (post.user_id !== profile.id) {
-      await supabase.from('notifications').insert({
+      supabase.from('notifications').insert({
         user_id: post.user_id, actor_id: profile.id,
         type: 'comment', post_id: post.id,
         message: `${profile.full_name} commented on your post`,
