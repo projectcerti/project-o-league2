@@ -1,14 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabaseClient'
 import { useApp } from '../App'
-import { getCurrentWeek, getWeekLabel, getWeekDeadline, calculatePoints, breakdownPoints } from '../utils/points'
+import { getCurrentWeek, getWeekLabel, getWeekDeadline, calculatePoints, breakdownPoints, CHALLENGE_START } from '../utils/points'
 
 const SESSION_TYPES = [
   { value: 'workout',   label: 'WORKOUT',   emoji: '💪', minDuration: 30, color: 'lime',   examples: 'Gym, run, football, class, training…' },
   { value: 'recovery',  label: 'RECOVERY',  emoji: '🧘', minDuration: 20, color: 'blue',   examples: 'Stretching, yoga, sauna, massage gun…' },
   { value: 'social',    label: 'SOCIAL',    emoji: '🤝', minDuration: 0,  color: 'green',  examples: '5-a-side, group class, training with someone…' },
 ]
-
 const ACTIVITY_OPTIONS = {
   workout:  ['Gym', 'Run', 'Football', 'Basketball', 'Cycling', 'Swimming', 'HIIT', 'Boxing', 'CrossFit', 'Pilates', 'Other'],
   recovery: ['Stretching', 'Yoga', 'Mobility', 'Sauna', 'Ice Bath', 'Massage Gun', 'Foam Rolling', 'Other'],
@@ -31,16 +30,21 @@ const RPE_LABELS = {
 const emptyForm = { session_type:'', activity_name:'', duration_minutes:'', rpe:null, notes:'' }
 const emptyNutritionForm = { meal_type:'', notes:'', tracking_link:'', goal_met: false }
 
-function getWeekDates(weekNum) {
-  const start = new Date(CHALLENGE_START)
+function getWeekDayOptions(weekNum) {
+  const start = new Date(CHALLENGE_START.getTime())
   start.setDate(start.getDate() + (weekNum - 1) * 7)
-  const end = new Date(start)
-  end.setDate(end.getDate() + 6)
-  // Clamp end to today so you can't log future dates
   const today = new Date()
-  if (end > today) end.setTime(today.getTime())
-  const fmtDate = d => d.toISOString().split('T')[0]
-  return { start: fmtDate(start), end: fmtDate(end), today: fmtDate(today) }
+  const todayStr = today.toISOString().split('T')[0]
+  const days = []
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start.getTime())
+    d.setDate(d.getDate() + i)
+    const str = d.toISOString().split('T')[0]
+    if (str > todayStr) break // don't show future dates
+    const label = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })
+    days.push({ value: str, label })
+  }
+  return days
 }
 
 const _cache = {}
@@ -419,26 +423,12 @@ export default function LogActivity() {
               <div>
                 <p className="text-xs font-dm text-muted uppercase tracking-widest mb-2">DATE</p>
                 <div className="flex gap-2 flex-wrap">
-                  {(() => {
-                    const wd = getWeekDates(weekNum)
-                    const days = []
-                    const d = new Date(wd.start + 'T00:00:00')
-                    const endD = new Date(wd.end + 'T00:00:00')
-                    while (d <= endD) {
-                      days.push(d.toISOString().split('T')[0])
-                      d.setDate(d.getDate() + 1)
-                    }
-                    return days.map(day => {
-                      const dt = new Date(day + 'T00:00:00')
-                      const label = dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })
-                      return (
-                        <button key={day} onClick={() => setLogDate(day)}
-                          className={`px-3 py-2 rounded-2xl text-xs font-dm border transition-all ${
-                            logDate === day ? 'border-lime/40 bg-lime/10 text-lime' : 'border-border text-muted hover:text-white'
-                          }`}>{label}</button>
-                      )
-                    })
-                  })()}
+                  {getWeekDayOptions(weekNum).map(day => (
+                    <button key={day.value} onClick={() => setLogDate(day.value)}
+                      className={`px-3 py-2 rounded-2xl text-xs font-dm border transition-all ${
+                        logDate === day.value ? 'border-lime/40 bg-lime/10 text-lime' : 'border-border text-muted hover:text-white'
+                      }`}>{day.label}</button>
+                  ))}
                 </div>
               </div>
 
@@ -583,26 +573,12 @@ export default function LogActivity() {
               <div>
                 <p className="text-xs font-dm text-muted uppercase tracking-widest mb-2">DATE</p>
                 <div className="flex gap-2 flex-wrap">
-                  {(() => {
-                    const wd = getWeekDates(weekNum)
-                    const days = []
-                    const d = new Date(wd.start + 'T00:00:00')
-                    const endD = new Date(wd.end + 'T00:00:00')
-                    while (d <= endD) {
-                      days.push(d.toISOString().split('T')[0])
-                      d.setDate(d.getDate() + 1)
-                    }
-                    return days.map(day => {
-                      const dt = new Date(day + 'T00:00:00')
-                      const label = dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })
-                      return (
-                        <button key={day} onClick={() => setNutLogDate(day)}
-                          className={`px-3 py-2 rounded-2xl text-xs font-dm border transition-all ${
-                            nutLogDate === day ? 'border-lime/40 bg-lime/10 text-lime' : 'border-border text-muted hover:text-white'
-                          }`}>{label}</button>
-                      )
-                    })
-                  })()}
+                  {getWeekDayOptions(weekNum).map(day => (
+                    <button key={day.value} onClick={() => setNutLogDate(day.value)}
+                      className={`px-3 py-2 rounded-2xl text-xs font-dm border transition-all ${
+                        nutLogDate === day.value ? 'border-lime/40 bg-lime/10 text-lime' : 'border-border text-muted hover:text-white'
+                      }`}>{day.label}</button>
+                  ))}
                 </div>
               </div>
 
