@@ -31,6 +31,18 @@ const RPE_LABELS = {
 const emptyForm = { session_type:'', activity_name:'', duration_minutes:'', rpe:null, notes:'' }
 const emptyNutritionForm = { meal_type:'', notes:'', tracking_link:'', goal_met: false }
 
+function getWeekDates(weekNum) {
+  const start = new Date(CHALLENGE_START)
+  start.setDate(start.getDate() + (weekNum - 1) * 7)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 6)
+  // Clamp end to today so you can't log future dates
+  const today = new Date()
+  if (end > today) end.setTime(today.getTime())
+  const fmtDate = d => d.toISOString().split('T')[0]
+  return { start: fmtDate(start), end: fmtDate(end), today: fmtDate(today) }
+}
+
 const _cache = {}
 
 export default function LogActivity() {
@@ -55,6 +67,8 @@ export default function LogActivity() {
   const [nutError, setNutError]         = useState('')
   const [deletingId, setDeletingId]     = useState(null)
   const [nutritionGoals, setNutritionGoals] = useState({})
+  const [logDate, setLogDate]           = useState(new Date().toISOString().split('T')[0])
+  const [nutLogDate, setNutLogDate]     = useState(new Date().toISOString().split('T')[0])
   const fileRef    = useRef()
   const nutFileRef = useRef()
 
@@ -198,6 +212,7 @@ export default function LogActivity() {
       session_type: form.session_type, activity_name: form.activity_name || null,
       duration_minutes: parseInt(form.duration_minutes), rpe: form.rpe,
       photo_url: photoUrl, notes: form.notes || null,
+      logged_at: new Date(logDate + 'T12:00:00').toISOString(),
     }).select().single()
     if (sessErr) { setError(sessErr.message); setSaving(false); return }
     const activityLabel = form.activity_name || type.label
@@ -209,7 +224,7 @@ export default function LogActivity() {
       user_id: profile.id, content: postContent.slice(0, 500),
       session_id: newSession.id, photo_urls: photoUrl ? [photoUrl] : [],
     })
-    setForm(emptyForm); removePhoto(); setShowForm(false); setSaving(false)
+    setForm(emptyForm); removePhoto(); setShowForm(false); setSaving(false); setLogDate(new Date().toISOString().split('T')[0])
     await load()
     syncWeeklySubmission()
   }
@@ -236,6 +251,7 @@ export default function LogActivity() {
       notes: nutForm.notes || null,
       tracking_link: nutForm.tracking_link || null,
       photo_urls: uploadedUrls.length > 0 ? uploadedUrls : null,
+      logged_at: new Date(nutLogDate + 'T12:00:00').toISOString(),
       ...(nutForm.goal_met !== undefined ? { goal_met: nutForm.goal_met } : {}),
     })
     if (nutErr) { setNutError(nutErr.message); setSavingNut(false); return }
@@ -250,6 +266,7 @@ export default function LogActivity() {
 
     setNutForm(emptyNutritionForm)
     setNutPhotos([])
+    setNutLogDate(new Date().toISOString().split('T')[0])
     setShowNutritionForm(false)
     setSavingNut(false)
     await load()
@@ -398,6 +415,33 @@ export default function LogActivity() {
               </div>
               {error && <div className="bg-red-900/20 border border-red-800/40 text-red-400 text-sm rounded-2xl px-4 py-3 font-dm">{error}</div>}
 
+              {/* Date picker */}
+              <div>
+                <p className="text-xs font-dm text-muted uppercase tracking-widest mb-2">DATE</p>
+                <div className="flex gap-2 flex-wrap">
+                  {(() => {
+                    const wd = getWeekDates(weekNum)
+                    const days = []
+                    const d = new Date(wd.start + 'T00:00:00')
+                    const endD = new Date(wd.end + 'T00:00:00')
+                    while (d <= endD) {
+                      days.push(d.toISOString().split('T')[0])
+                      d.setDate(d.getDate() + 1)
+                    }
+                    return days.map(day => {
+                      const dt = new Date(day + 'T00:00:00')
+                      const label = dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })
+                      return (
+                        <button key={day} onClick={() => setLogDate(day)}
+                          className={`px-3 py-2 rounded-2xl text-xs font-dm border transition-all ${
+                            logDate === day ? 'border-lime/40 bg-lime/10 text-lime' : 'border-border text-muted hover:text-white'
+                          }`}>{label}</button>
+                      )
+                    })
+                  })()}
+                </div>
+              </div>
+
               <div>
                 <p className="text-xs font-dm text-muted uppercase tracking-widest mb-2">SESSION TYPE</p>
                 <div className="grid grid-cols-3 gap-2">
@@ -534,6 +578,33 @@ export default function LogActivity() {
                   className="text-muted hover:text-white text-xl">×</button>
               </div>
               {nutError && <div className="bg-red-900/20 border border-red-800/40 text-red-400 text-sm rounded-2xl px-4 py-3 font-dm">{nutError}</div>}
+
+              {/* Date picker */}
+              <div>
+                <p className="text-xs font-dm text-muted uppercase tracking-widest mb-2">DATE</p>
+                <div className="flex gap-2 flex-wrap">
+                  {(() => {
+                    const wd = getWeekDates(weekNum)
+                    const days = []
+                    const d = new Date(wd.start + 'T00:00:00')
+                    const endD = new Date(wd.end + 'T00:00:00')
+                    while (d <= endD) {
+                      days.push(d.toISOString().split('T')[0])
+                      d.setDate(d.getDate() + 1)
+                    }
+                    return days.map(day => {
+                      const dt = new Date(day + 'T00:00:00')
+                      const label = dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })
+                      return (
+                        <button key={day} onClick={() => setNutLogDate(day)}
+                          className={`px-3 py-2 rounded-2xl text-xs font-dm border transition-all ${
+                            nutLogDate === day ? 'border-lime/40 bg-lime/10 text-lime' : 'border-border text-muted hover:text-white'
+                          }`}>{label}</button>
+                      )
+                    })
+                  })()}
+                </div>
+              </div>
 
               {/* Meal type */}
               <div>
