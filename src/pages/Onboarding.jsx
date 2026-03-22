@@ -209,7 +209,7 @@ export default function Onboarding() {
                   <p>⭐ All 4 categories = +1pt bonus</p>
                 </RuleCard>
                 <RuleCard emoji="⏰" title="DEADLINE">
-                  <p>Submit by <span className="text-white font-medium">Sunday 8pm</span> each week</p>
+                  <p>Submit by <span className="text-white font-medium">Sunday midnight</span> each week</p>
                   <p className="text-muted">15 minute grace period applies</p>
                 </RuleCard>
                 <RuleCard emoji="🎯" title="PRIZE ELIGIBILITY" highlight>

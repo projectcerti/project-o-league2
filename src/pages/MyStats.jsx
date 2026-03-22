@@ -41,7 +41,7 @@ export default function MyStats({ embedded = false }) {
         <div className="bg-gold/10 border border-gold/30 rounded-2xl px-5 py-4">
           <p className="font-kanit font-bold italic uppercase text-xl text-gold">🏆 FLAWLESS BONUS ON TRACK</p>
           <p className="text-sm text-muted mt-0.5">
-            Keep submitting before the Sunday 8pm deadline every week to secure the £50 flawless bonus.
+            Keep submitting before the Sunday midnight deadline every week to secure the £50 flawless bonus.
           </p>
         </div>
       )}

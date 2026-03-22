@@ -109,7 +109,7 @@ export default function Dashboard() {
               {isPastDeadline ? 'Deadline passed' :
                thisWeekSub ? thisWeekSub.status :
                isUrgent ? `Only ${hoursLeft}h left!` :
-               `Due Sunday 8pm · ${hoursLeft}h left`}
+               `Due Sun midnight · ${hoursLeft}h left`}
             </p>
           </div>
           {!thisWeekSub && !isPastDeadline ? (
