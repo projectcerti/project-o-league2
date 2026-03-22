@@ -19,8 +19,8 @@ export function getWeekLabel(weekNum) {
 
 export function getWeekDeadline(weekNum) {
   const d = new Date(CHALLENGE_START)
-  d.setDate(d.getDate() + weekNum * 7 - 1) // Sunday of that week
-  d.setHours(20, 0, 0, 0)
+  d.setDate(d.getDate() + weekNum * 7) // Monday after that week
+  d.setHours(0, 15, 0, 0) // 00:15 (15 mins past midnight)
   return d
 }
 
