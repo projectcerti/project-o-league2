@@ -211,12 +211,12 @@ function PostCard({ post, profile, likedIds, onLike, onComment }) {
   const hasPhotos = post.photo_urls?.length > 0
   const [lightbox, setLightbox] = useState(null)
 
-  const commentCount = post.comment_count || comments.length
+  const commentCount = comments.length || post.comment_count || 0
   const likesCount = post.likes_count || 0
 
-  // Auto-load comments on mount if the post has any
+  // Always load comments on mount
   useEffect(() => {
-    if (commentCount > 0 && comments.length === 0) loadComments()
+    loadComments()
   }, [])
 
   async function loadComments() {
